@@ -16,6 +16,15 @@ from backend.services.agent.settings import (
 )
 
 
+def _language_directive(language: str) -> str:
+    return (
+        f"Default to {language} for any natural-language text in your response (e.g. free-text fields, "
+        "explanations). If the user's message explicitly asks for a different language, use that language "
+        "instead. This does not apply to fixed field names, enum values, or other structural output the "
+        "instructions above require verbatim."
+    )
+
+
 def run_agent_planner_completion(
     messages: List[Dict[str, str]],
     *,
@@ -23,7 +32,17 @@ def run_agent_planner_completion(
     timeout_seconds: Optional[float] = None,
     model_name: str = "",
     error_label: str = "business query planner",
+    language: Optional[str] = None,
 ) -> str:
+    if language:
+        directive = _language_directive(language)
+        if messages and messages[0].get("role") == "system":
+            messages = [
+                {**messages[0], "content": f"{messages[0].get('content', '')}\n\n{directive}"},
+                *messages[1:],
+            ]
+        else:
+            messages = [{"role": "system", "content": directive}, *messages]
     resolved_model = resolve_agent_llm_model_name(str(model_name or "").strip() or None)
     payload: Dict[str, Any] = {
         "model": resolved_model,

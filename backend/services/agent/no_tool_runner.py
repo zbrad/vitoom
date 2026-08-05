@@ -92,11 +92,16 @@ def build_no_tool_messages(
     resolved_agents = list(agent_specs or [])
     resolved_tasks = list(task_specs or [])
 
+    default_language = str(inputs.get("default_language") or "English")
     system_parts: List[str] = [
         "No external tools are available for this run.",
         "Answer directly with the available conversation context. Do not mention tool availability or claim that you used tools.",
-        # 锁定回复语种：防止纯英文 system prompt 让中文/日文 query 拿到英文回答。
-        "Always respond in the same language as the latest user message.",
+        # 语言策略：默认使用会话的默认语言（通常来自浏览器 locale），仅当用户在对话中
+        # （不限于最新一条消息）明确要求切换语言时才改用该语言。
+        f"Default to {default_language} for the final answer. Check the whole visible conversation, not just "
+        "the newest message, for the most recent explicit language request (e.g. 'reply in Chinese', "
+        "'用中文回答', '日本語で答えて'); if one exists and the user hasn't since asked to switch again, keep "
+        f"using that language. Otherwise use {default_language}.",
     ]
     if resolved_agents:
         system_parts.append("Agent configuration:")

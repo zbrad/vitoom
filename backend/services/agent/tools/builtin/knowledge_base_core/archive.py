@@ -131,7 +131,9 @@ def save_markdown_to_archive(markdown: str, *, user_id: str, title: str = "") ->
     return target
 
 
-def summarize_conversation_to_markdown(content: str, *, title: str = "", user_id: str = "") -> str:
+def summarize_conversation_to_markdown(
+    content: str, *, title: str = "", user_id: str = "", language: Optional[str] = None
+) -> str:
     messages = [
         {
             "role": "system",
@@ -142,7 +144,9 @@ def summarize_conversation_to_markdown(content: str, *, title: str = "", user_id
             "content": f"标题：{title or '对话归档'}\n\n对话内容：\n{content}",
         },
     ]
-    return run_agent_planner_completion(messages, user_id=user_id, error_label="knowledge archive conversation summary")
+    return run_agent_planner_completion(
+        messages, user_id=user_id, error_label="knowledge archive conversation summary", language=language
+    )
 
 
 def archive_file_path(
@@ -207,7 +211,12 @@ def archive_conversation(
     summarize: bool = True,
     classify: bool = True,
     knowledge_base_id: str = "default",
+    language: Optional[str] = None,
 ) -> Dict[str, Any]:
-    markdown = summarize_conversation_to_markdown(content, title=title, user_id=user_id) if summarize else content
+    markdown = (
+        summarize_conversation_to_markdown(content, title=title, user_id=user_id, language=language)
+        if summarize
+        else content
+    )
     path = save_markdown_to_archive(markdown, user_id=user_id, title=title)
     return archive_file_path(path, user_id=user_id, source_kind="conversation", title=title, classify=classify, knowledge_base_id=knowledge_base_id)

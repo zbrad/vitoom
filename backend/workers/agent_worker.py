@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Any, Dict, Optional
 
 from backend.core.logger import get_app_logger
-from backend.database import Agent, AgentRun
+from backend.database import Agent, AgentRun, Conversation
 from backend.queue import get_task_queue
 from backend.queue.worker import TaskWorker
 from backend.services.agent.crews import CrewFactory
@@ -23,6 +23,7 @@ from backend.services.agent.specs import AgentSpec, GLOBAL_TOOL_POOL, TaskSpec
 from backend.services.agent.tool_resolver import ToolResolver
 from backend.services.agent.tool_selection import ToolSelectionService
 from backend.services.agent.types import AgentCommand, AgentResult
+from backend.services.chat.language import resolve_default_language
 
 logger = get_app_logger(__name__)
 
@@ -180,6 +181,17 @@ class AgentWorker(TaskWorker):
         command = AgentCommand.from_dict(agent_run.get("input_payload") or {})
         runtime_config = dict(agent_run.get("runtime_config") or {})
 
+        # 没有实时 WS 连接可读 locale，这里没有值时回落到会话持久化的 locale
+        # （由 backend/websocket/chat_routes.py / backend/api/chat/routes.py 写入）。
+        command.context = dict(command.context or {})
+        if not command.context.get("default_language"):
+            persisted_locale = None
+            if command.conversation_id:
+                conv = Conversation.get_by_id(command.conversation_id)
+                if conv:
+                    persisted_locale = (conv.get("metadata") or {}).get("locale")
+            command.context["default_language"] = resolve_default_language(persisted_locale)
+
         started_at = datetime.utcnow()
         try:
             AgentRun.update(
@@ -272,6 +284,7 @@ class AgentWorker(TaskWorker):
                         "conversation_id": command.conversation_id,
                         "runtime_config": runtime_config,
                         "source_type": command.source_type or "master-agent",
+                        "language": command.context.get("default_language"),
                     },
                 )
                 tools_by_name = {

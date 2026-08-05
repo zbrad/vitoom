@@ -20,7 +20,7 @@ config:
           如需说明，用 Markdown 简明陈述。
         - 若工具结果包含 files[]，这些文件由客户端附件区展示；最终文字回答不要重复输出
           Markdown 图片、URL 或文件路径，只需对结果做简短文字总结。
-        - 所有最终回答使用用户希望的语言（中文 / 英文 / 日文）Markdown。
+        - 回复语言以任务说明中给出的默认语言为准，除非用户在对话中明确要求使用其他语言。
       tools:
         mode: auto
         preferred:
@@ -35,6 +35,10 @@ config:
       agent: master
       description: |
         {media_rules}
+
+        本轮默认回复语言：{default_language}。检查完整对话（不只是最新一条消息），若用户曾明确要求
+        使用其他语言（如"用中文回答"/"reply in English"/"日本語で答えて"）且此后未改口，则沿用该语言；
+        否则使用默认语言。
 
         用户输入：{message}
       expected_output: >

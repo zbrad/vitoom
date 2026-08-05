@@ -21,6 +21,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin
 from urllib.request import Request, urlopen
 
+from backend.services.agent.tools.builtin._fallback_strings import current_hr_language, hr_string
 from backend.services.agent.tools.builtin.business_query_core.executor_base import (
     placeholder_cost_check as base_placeholder_cost_check,
     placeholder_permission_check as base_placeholder_permission_check,
@@ -697,9 +698,9 @@ def _format_person(record: EmployeeRecord) -> str:
     )
 
 
-def _format_people(records: Iterable[EmployeeRecord], *, empty_text: str = "未找到匹配人员。") -> List[str]:
+def _format_people(records: Iterable[EmployeeRecord], *, empty_text: Optional[str] = None) -> List[str]:
     rows = [f"- {_format_person(record)}" for record in records]
-    return rows or [empty_text]
+    return rows or [empty_text or hr_string("no_matching_people", current_hr_language())]
 
 
 def _doc_get(record: Any, field: str, default: Any = "") -> Any:
@@ -723,9 +724,9 @@ def _format_any_person(record: Any) -> str:
     )
 
 
-def _format_any_people(records: Iterable[Any], *, empty_text: str = "未找到匹配人员。") -> List[str]:
+def _format_any_people(records: Iterable[Any], *, empty_text: Optional[str] = None) -> List[str]:
     rows = [f"- {_format_any_person(record)}" for record in records]
-    return rows or [empty_text]
+    return rows or [empty_text or hr_string("no_matching_people", current_hr_language())]
 
 
 def _contains_any(text: str, words: Iterable[str]) -> bool:
@@ -1784,7 +1785,7 @@ def _execute_attribute_lookup(query_spec: Dict[str, Any]) -> tuple[List[str], Li
     rows = _fetch_attribute_subjects_from_es(query_spec)
 
     if not rows:
-        return ["未找到匹配员工；请提供更明确的姓名或员工 ID。"], [], {"backend": "es"}
+        return [hr_string("no_matching_employee_guidance", current_hr_language())], [], {"backend": "es"}
 
     lines: List[str] = []
     for row in rows:
@@ -1842,7 +1843,7 @@ def _fetch_attribute_subjects_from_es(query_spec: Dict[str, Any]) -> List[Dict[s
 def _execute_es_document_fetch(query_spec: Dict[str, Any]) -> tuple[List[str], List[Dict[str, Any]], Dict[str, Any]]:
     employees = _fetch_attribute_subjects_from_es(query_spec)
     if not employees:
-        return ["未找到匹配员工；请提供更明确的姓名或员工 ID。"], [], {"employee_hits": 0}
+        return [hr_string("no_matching_employee_guidance", current_hr_language())], [], {"employee_hits": 0}
 
     config = sample_backend._hr_es_config()  # noqa: SLF001 - domain backend
     asset_index = str(config.get("resume_asset_index") or "")

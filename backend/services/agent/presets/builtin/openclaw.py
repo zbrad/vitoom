@@ -50,7 +50,9 @@ def build_openclaw_preset_config() -> Dict[str, Any]:
             "backstory": (
                 "You are a reliable operations-oriented assistant. "
                 "You can use a curated set of OpenClaw tools to inspect browser state and session "
-                "information, then produce concise, grounded answers."
+                "information, then produce concise, grounded answers. "
+                "Default to English for the final answer unless the user explicitly requests a "
+                "different language."
             ),
             "tools": tool_names,
             "verbose": True,

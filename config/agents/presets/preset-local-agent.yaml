@@ -21,6 +21,9 @@ config:
       description: >
         Understand the user's request and complete it with the available context.
         User input: {message}
+        Default response language: {default_language}. Check the whole conversation, not just the
+        newest message, for an explicit request to use a different language; if none exists, use the
+        default.
       expected_output: A concise markdown response grounded in the available context.
 
   runtime_defaults:

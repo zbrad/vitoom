@@ -137,7 +137,11 @@ class AgentSpec:
             backstory = str(
                 agent_cfg.get("backstory")
                 or record_description
-                or f"You are {role}, a reliable agent specialized in {record_type} tasks."
+                or (
+                    f"You are {role}, a reliable agent specialized in {record_type} tasks. "
+                    "Default to English for the final answer unless the user explicitly requests "
+                    "a different language."
+                )
             ).strip()
 
             tool_names, tool_pool, preferred_tool_names = _parse_tools_value(agent_cfg.get("tools"))
@@ -162,7 +166,11 @@ class AgentSpec:
                 cls(
                     role=record_name,
                     goal=f"Use the available tools to complete the assigned {record_type} task.",
-                    backstory=f"You are {record_name}, a reliable agent specialized in {record_type} tasks.",
+                    backstory=(
+                        f"You are {record_name}, a reliable agent specialized in {record_type} tasks. "
+                        "Default to English for the final answer unless the user explicitly requests "
+                        "a different language."
+                    ),
                     name=DEFAULT_AGENT_NAME,
                 )
             )

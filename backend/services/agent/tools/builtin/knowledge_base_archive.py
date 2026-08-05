@@ -32,6 +32,7 @@ def _json_dumps(value: Any) -> str:
 def build_knowledge_base_archive_tool(*, context: Optional[Dict[str, Any]] = None):
     ctx = dict(context or {})
     bound_user_id = str(ctx.get("user_id") or "").strip()
+    bound_language = str(ctx.get("language") or "").strip() or None
 
     try:
         from crewai.tools import BaseTool  # type: ignore[import-not-found]
@@ -99,6 +100,7 @@ def build_knowledge_base_archive_tool(*, context: Optional[Dict[str, Any]] = Non
                         summarize=summarize,
                         classify=classify,
                         knowledge_base_id=knowledge_base_id or "default",
+                        language=bound_language,
                     )
                 else:
                     raise ValueError("mode 只支持 url 或 conversation")

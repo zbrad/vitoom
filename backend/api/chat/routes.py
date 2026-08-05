@@ -14,13 +14,14 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from backend.auth import get_current_user_id
 from backend.core.config import get_config
 from backend.core.response import ok
 from backend.database import Model
+from backend.i18n.locale import normalize_locale
 from backend.services.agent.settings import get_master_preset_agent_id
 from backend.services.conversation import (
     ConversationValidationError,
@@ -186,7 +187,7 @@ def _build_audio_input_metadata(load_name: str) -> Dict[str, Any]:
     return {"load_name": normalized, "family": "", "runtime_config": {}}
 
 
-def _build_session_metadata(request: ChatSessionCreateRequest) -> Dict[str, Any]:
+def _build_session_metadata(request: ChatSessionCreateRequest, *, locale: Optional[str] = None) -> Dict[str, Any]:
     metadata = dict(request.metadata or {})
     metadata.setdefault("input_mode", request.input_mode)
     metadata.setdefault("output_mode", request.output_mode)
@@ -200,17 +201,24 @@ def _build_session_metadata(request: ChatSessionCreateRequest) -> Dict[str, Any]
     audio_output = _normalize_audio_output_config(request)
     if audio_output:
         metadata["audio_output"] = audio_output
+    if locale:
+        # 前端每次请求都带 Accept-Language（见 frontend/src/utils/api.ts），
+        # 建会话时落一份到 conversation.metadata 作为该会话的默认回复语言来源。
+        metadata.setdefault("locale", locale)
     return metadata
 
 
 @router.post("/sessions")
 async def create_chat_session(
     request: ChatSessionCreateRequest,
+    http_request: Request,
     user_id: str = Depends(get_current_user_id),
 ):
     try:
         agent_id = (request.agent_id or "").strip() or get_master_preset_agent_id()
-        metadata = _build_session_metadata(request)
+        accept_language = http_request.headers.get("accept-language")
+        locale = normalize_locale(accept_language) if accept_language else None
+        metadata = _build_session_metadata(request, locale=locale)
 
         session = create_conversation(
             user_id=user_id,

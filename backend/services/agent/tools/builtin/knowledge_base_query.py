@@ -11,6 +11,7 @@ from backend.services.agent.tools.builtin.knowledge_base_core.models import Quer
 from backend.services.agent.tools.builtin.knowledge_base_core.reranker import rule_rerank
 from backend.services.agent.tools.builtin.knowledge_base_core.retriever import KnowledgeBaseRetriever, dedupe_adjacent_chunks
 from backend.services.agent.tools.builtin.knowledge_base_core.settings import load_knowledge_base_config
+from backend.services.agent.tools.builtin._fallback_strings import kb_headers, kb_string
 from backend.services.agent.tools.registry import register_tool
 
 logger = logging.getLogger(__name__)
@@ -58,13 +59,14 @@ def run_knowledge_base_query(
     filters: Optional[Dict[str, Any]] = None,
     user_id: str = "agent-system",
     tenant_id: str = "default",
+    language: Optional[str] = None,
 ) -> str:
     text = str(query or "").strip()
     if not text:
-        return "请提供要查询的知识库问题。"
+        return kb_string("missing_query", language)
     config = load_knowledge_base_config()
     if not config.enabled:
-        return "知识库查询当前未启用。"
+        return kb_string("disabled", language)
     context = QueryContext(user_id=str(user_id or "agent-system").strip() or "agent-system", tenant_id=str(tenant_id or "default").strip() or "default")
     try:
         retrieval = KnowledgeBaseRetriever(config).retrieve(text, context=context, filters=filters or {}, knowledge_base_id=knowledge_base_id)
@@ -74,13 +76,16 @@ def run_knowledge_base_query(
             hits = rule_rerank(text, hits[: config.rerank_top_n], top_k=final_top_k)
         else:
             hits = hits[:final_top_k]
-        markdown = generate_answer(text, hits, user_id=context.user_id, max_context_chars=config.answer_max_context_chars)
+        markdown = generate_answer(
+            text, hits, user_id=context.user_id, max_context_chars=config.answer_max_context_chars, language=language
+        )
         sources = format_sources(hits) if include_sources else []
         debug_enabled = include_debug or config.include_debug
+        evidence_header = kb_headers(language)["evidence"]
         if debug_enabled:
             markdown = append_debug(markdown, sources=sources, debug=retrieval.get("debug") or {})
-        elif include_sources and sources and "### 依据" not in markdown:
-            markdown = f"{markdown.rstrip()}\n\n### 依据\n" + "\n".join(f"- 《{item['file_name']}》" for item in sources)
+        elif include_sources and sources and evidence_header not in markdown:
+            markdown = f"{markdown.rstrip()}\n\n{evidence_header}\n" + "\n".join(f"- {item['file_name']}" for item in sources)
         return markdown
     except Exception as exc:
         logger.exception(
@@ -110,6 +115,7 @@ def build_knowledge_base_query_tool(*, context: Optional[Dict[str, Any]] = None)
     ctx = dict(context or {})
     bound_user_id = str(ctx.get("user_id") or "").strip()
     bound_tenant_id = str(ctx.get("tenant_id") or "default").strip() or "default"
+    bound_language = str(ctx.get("language") or "").strip() or None
 
     try:
         from crewai.tools import BaseTool  # type: ignore[import-not-found]
@@ -161,6 +167,7 @@ def build_knowledge_base_query_tool(*, context: Optional[Dict[str, Any]] = None)
                 filters=payload.get("filters") if isinstance(payload.get("filters"), dict) else {},
                 user_id=bound_user_id or "agent-system",
                 tenant_id=bound_tenant_id,
+                language=bound_language,
             )
 
     KnowledgeBaseQueryTool.__doc__ = KNOWLEDGE_BASE_QUERY_DOCSTRING

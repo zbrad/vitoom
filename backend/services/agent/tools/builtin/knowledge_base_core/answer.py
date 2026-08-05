@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any, Dict, Iterable, List
+from typing import Any, Dict, Iterable, List, Optional
 
 from backend.services.agent.tools.builtin.business_query_core.planner_base import run_agent_planner_completion
+from backend.services.agent.tools.builtin._fallback_strings import kb_headers, kb_string
 
 from .models import RetrievalHit
 
@@ -63,16 +64,21 @@ def format_sources(hits: Iterable[RetrievalHit]) -> List[Dict[str, Any]]:
     return sources
 
 
-def evidence_only_answer(query: str, hits: List[RetrievalHit]) -> str:
+def evidence_only_answer(query: str, hits: List[RetrievalHit], *, language: Optional[str] = None) -> str:
+    headers = kb_headers(language)
     if not hits:
-        return "### 答案\n\n知识库未找到足够依据。\n\n### 依据\n\n- 无\n\n### 未覆盖信息\n\n- 未检索到可引用的知识库片段。"
+        return (
+            f"{headers['answer']}\n\n{kb_string('no_evidence', language)}\n\n"
+            f"{headers['evidence']}\n\n- {kb_string('none', language)}\n\n"
+            f"{headers['not_covered']}\n\n- {kb_string('no_evidence', language)}"
+        )
     display_hits = _lexically_matching_hits(query, hits)
     if not display_hits:
         display_hits = hits[:3]
-    lines = ["### 答案", "", "已在知识库中找到以下相关资料。", "", "### 依据"]
+    lines = [headers["answer"], "", kb_string("found_related", language), "", headers["evidence"]]
     for hit in display_hits:
         lines.append(f"- {_source_label(hit)}：{_snippet(hit.text or hit.source.get('metadata_text') or '')}")
-    lines.extend(["", "### 未覆盖信息", "", f"- 如需正文级结论，需要知识库中存在可解析正文；压缩包第一版只索引文件名和路径。问题：{query}"])
+    lines.extend(["", headers["not_covered"], "", f"- {kb_string('no_body_text', language).format(query=query)}"])
     return "\n".join(lines)
 
 
@@ -107,18 +113,27 @@ def _lexically_matching_hits(query: str, hits: List[RetrievalHit]) -> List[Retri
     return matched
 
 
-def generate_answer(query: str, hits: List[RetrievalHit], *, user_id: str, max_context_chars: int) -> str:
+def generate_answer(
+    query: str,
+    hits: List[RetrievalHit],
+    *,
+    user_id: str,
+    max_context_chars: int,
+    language: Optional[str] = None,
+) -> str:
     if not hits:
-        return evidence_only_answer(query, hits)
+        return evidence_only_answer(query, hits, language=language)
     if _is_existence_query(query):
-        return evidence_only_answer(query, hits)
+        return evidence_only_answer(query, hits, language=language)
     context = build_context(hits, max_chars=max_context_chars)
+    headers = kb_headers(language)
     messages = [
         {
             "role": "system",
             "content": (
-                "你是本地知识库问答助手。只能基于给定检索片段回答；证据不足时必须说“知识库未找到足够依据”。"
-                "不得编造不存在的文档、页码或结论。输出固定包含：### 答案、### 依据、### 未覆盖信息。"
+                "你是本地知识库问答助手。只能基于给定检索片段回答；证据不足时必须明确说明未找到足够依据。"
+                "不得编造不存在的文档、页码或结论。输出固定包含以下三个小节标题（原样使用，不要翻译成其他写法）："
+                f"{headers['answer']}、{headers['evidence']}、{headers['not_covered']}。"
             ),
         },
         {
@@ -127,9 +142,11 @@ def generate_answer(query: str, hits: List[RetrievalHit], *, user_id: str, max_c
         },
     ]
     try:
-        return run_agent_planner_completion(messages, user_id=user_id, error_label="knowledge base answer")
+        return run_agent_planner_completion(
+            messages, user_id=user_id, error_label="knowledge base answer", language=language
+        )
     except Exception:
-        return evidence_only_answer(query, hits)
+        return evidence_only_answer(query, hits, language=language)
 
 
 def append_debug(markdown: str, *, sources: List[Dict[str, Any]], debug: Dict[str, Any]) -> str:

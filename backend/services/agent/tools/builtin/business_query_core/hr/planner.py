@@ -759,9 +759,15 @@ class LLMQuerySpecPlanner:
         self.timeout_seconds = timeout_seconds
         self.model_name = model_name
 
-    def plan(self, query: str, *, user_id: str = "agent-system") -> PlannerResult:
+    def plan(self, query: str, *, user_id: str = "agent-system", language: Optional[str] = None) -> PlannerResult:
         messages = build_hr_planner_messages(query)
-        raw = run_hr_planner_completion(messages, user_id=user_id, timeout_seconds=self.timeout_seconds, model_name=self.model_name)
+        raw = run_hr_planner_completion(
+            messages,
+            user_id=user_id,
+            timeout_seconds=self.timeout_seconds,
+            model_name=self.model_name,
+            language=language,
+        )
         query_spec = parse_llm_query_spec(raw)
         return PlannerResult(query_spec=query_spec, debug={"planner": PLANNER_LLM, "raw": raw})
 
@@ -771,9 +777,10 @@ def plan_hr_query_spec(
     max_limit: int = 100,
     user_id: str = "agent-system",
     llm_planner: Optional[LLMQuerySpecPlanner] = None,
+    language: Optional[str] = None,
 ) -> PlannerResult:
     """Plan a validated HR QuerySpec through the single internal LLM path."""
-    result = (llm_planner or LLMQuerySpecPlanner()).plan(query, user_id=user_id)
+    result = (llm_planner or LLMQuerySpecPlanner()).plan(query, user_id=user_id, language=language)
     result.query_spec = repair_query_spec_from_query(result.query_spec, query)
     _apply_business_rule_filters(result.query_spec, query)
     _apply_default_headcount_scope(result.query_spec, query)
@@ -1117,6 +1124,7 @@ def run_hr_planner_completion(
     user_id: str = "agent-system",
     timeout_seconds: Optional[float] = None,
     model_name: str = "",
+    language: Optional[str] = None,
 ) -> str:
     return run_agent_planner_completion(
         messages,
@@ -1124,6 +1132,7 @@ def run_hr_planner_completion(
         timeout_seconds=timeout_seconds,
         model_name=model_name,
         error_label="HR planner",
+        language=language,
     )
 
 

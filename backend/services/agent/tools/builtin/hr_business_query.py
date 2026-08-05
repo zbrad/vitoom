@@ -19,6 +19,7 @@ from backend.services.agent.tools.builtin.business_query_core.hr.executor import
 )
 from backend.services.agent.tools.builtin.business_query_core.hr.planner import parse_query_spec_input
 from backend.services.agent.tools.builtin.business_query_core.hr.query_spec import QuerySpecValidationError, validate_query_spec
+from backend.services.agent.tools.builtin._fallback_strings import hr_string, reset_hr_language, set_hr_language
 from backend.services.agent.tools.registry import register_tool
 
 HR_BUSINESS_QUERY_TOOL_NAME = "hr_business_query"
@@ -69,8 +70,10 @@ def run_hr_business_query(
     include_sample_rows: bool = True,
     include_debug: bool = False,
     user_id: str = "agent-system",
+    language: Optional[str] = None,
 ) -> str:
     text = str(query or "").strip()
+    hr_language_token = set_hr_language(language)
     try:
         configured = _query_config()
         direct_spec = parse_query_spec_input(query_spec)
@@ -86,7 +89,7 @@ def run_hr_business_query(
             except QuerySpecValidationError as exc:
                 if not text:
                     raise
-                plan = _plan_queryspec(text, configured=configured, user_id=user_id)
+                plan = _plan_queryspec(text, configured=configured, user_id=user_id, language=language)
                 planned_spec = plan.query_spec
                 planner_debug = {
                     **plan.debug,
@@ -95,9 +98,9 @@ def run_hr_business_query(
                 }
         else:
             if not text:
-                return "请提供一个 HR 业务问题，或传入 query_spec JSON。"
+                return hr_string("missing_query", language)
             if route == "queryspec":
-                plan = _plan_queryspec(text, configured=configured, user_id=user_id)
+                plan = _plan_queryspec(text, configured=configured, user_id=user_id, language=language)
                 planned_spec = plan.query_spec
                 planner_debug = {**plan.debug, "planner": "unified", "route": route}
             else:
@@ -117,7 +120,7 @@ def run_hr_business_query(
                     )
                     return _append_unsupported_field_notes(answer, text)
                 except Exception as exc:
-                    plan = _plan_queryspec(text, configured=configured, user_id=user_id)
+                    plan = _plan_queryspec(text, configured=configured, user_id=user_id, language=language)
                     planned_spec = plan.query_spec
                     planner_debug = {
                         **plan.debug,
@@ -145,6 +148,8 @@ def run_hr_business_query(
         return compose_hr_error(f"QuerySpec 校验失败：{exc}", include_debug=include_debug, debug={"query": text})
     except Exception as exc:
         return compose_hr_error(f"HR 查询执行失败：{type(exc).__name__}: {exc}", include_debug=include_debug, debug={"query": text})
+    finally:
+        reset_hr_language(hr_language_token)
 
 
 def _classify_hr_query_route(query: str, query_spec: Any = None) -> str:
@@ -227,11 +232,12 @@ def _append_unsupported_field_notes(answer: str, query: str) -> str:
     return answer.rstrip() + "\n\n### 未覆盖字段\n" + "\n".join(f"- {note}" for note in notes)
 
 
-def _plan_queryspec(query: str, *, configured: Dict[str, Any], user_id: str):
+def _plan_queryspec(query: str, *, configured: Dict[str, Any], user_id: str, language: Optional[str] = None):
     return plan_hr_query_spec(
         query,
         max_limit=configured["max_limit"],
         user_id=user_id,
+        language=language,
     )
 
 
@@ -287,6 +293,7 @@ def _query_config() -> Dict[str, Any]:
 def build_hr_business_query_tool(*, context: Optional[Dict[str, Any]] = None):
     ctx = dict(context or {})
     bound_user_id = str(ctx.get("user_id") or "").strip()
+    bound_language = str(ctx.get("language") or "").strip() or None
 
     try:
         from crewai.tools import BaseTool  # type: ignore[import-not-found]
@@ -343,6 +350,7 @@ def build_hr_business_query_tool(*, context: Optional[Dict[str, Any]] = None):
                 include_sample_rows=bool(payload.get("include_sample_rows", True)),
                 include_debug=bool(payload.get("include_debug", False)),
                 user_id=bound_user_id or "agent-system",
+                language=bound_language,
             )
 
     HRBusinessQueryTool.__doc__ = HR_BUSINESS_QUERY_DOCSTRING

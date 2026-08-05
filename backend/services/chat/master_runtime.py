@@ -59,6 +59,7 @@ from backend.services.chat.artifacts import (
     default_category_for_tool,
     try_parse_tool_result_payload,
 )
+from backend.services.chat.language import resolve_default_language
 from backend.services.chat.media_context import build_conditional_context
 from backend.services.conversation import build_prompt_with_history
 from backend.services.chat.router import LoadNameRouter
@@ -163,6 +164,12 @@ class MasterAgentRuntime:
         command_context = build_conditional_context(prompt_with_history)
         command_context["original_user_message"] = user_text
         command_context["turn_id"] = turn.turn_id
+        # 会话默认回复语言：优先取本次 WS 连接/建会话时捕获的浏览器 locale
+        # （见 backend/websocket/chat_routes.py、backend/api/chat/routes.py），
+        # 没有信号时兜底英文。显式语言请求由 prompt 里的策略文本自行处理。
+        command_context["default_language"] = resolve_default_language(
+            (runtime.metadata or {}).get("locale")
+        )
 
         command = AgentCommand(
             user_id=runtime.user_id,
@@ -744,6 +751,7 @@ def _run_crew_blocking(
             "runtime_config": command.runtime_config,
             "source_type": command.source_type or "chat-ws",
             "session_nested_tool_hooks": session_nested_tool_hooks,
+            "language": command.context.get("default_language") if isinstance(command.context, dict) else None,
         },
     )
     tools_by_name = {name: tool for name, tool in zip(selected_tool_names, resolved_tools)}

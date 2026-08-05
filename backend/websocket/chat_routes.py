@@ -27,6 +27,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from backend.core.config import get_config
 from backend.core.logger import get_app_logger
 from backend.database import Conversation
+from backend.i18n.locale import normalize_locale
 from backend.services.chat import InputMode, MasterAgentRuntime, SessionRuntime
 from backend.services.chat.inference_session import InferenceSessionManager
 from backend.services.chat.router import get_dispatch_router, get_load_name_router
@@ -111,6 +112,13 @@ async def websocket_chat_session(
     # 后端 forward_session_message 广播给前端，又负责进程内订阅分发）
     await manager.connect_session(websocket, session_id, str(user_id))
     conversation_metadata = _conversation_metadata(conv)
+    if locale:
+        # 浏览器每次连接都会带 ?locale=，用它刷新会话默认语言（用户切换语言后重连即生效）；
+        # 同时写回 conversation.metadata，供没有实时 WS 连接的场景（worker）读取。
+        normalized_locale = normalize_locale(locale)
+        if conversation_metadata.get("locale") != normalized_locale:
+            conversation_metadata["locale"] = normalized_locale
+            Conversation.update(session_id, metadata=conversation_metadata)
 
     async def _emit(event: Dict[str, Any], *, binary: Optional[bytes] = None) -> None:
         # 统一走 forward_session_message：前端 WS 与推理器回流共享同一条管道；
