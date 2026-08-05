@@ -39,7 +39,8 @@ __pycache__/
 test.py
 .vendor
 .cursor/
-.env
+.env*
+!.env.example
 config/app.yaml
 /data
 images
