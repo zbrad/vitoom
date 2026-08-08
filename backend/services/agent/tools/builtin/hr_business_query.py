@@ -19,7 +19,13 @@ from backend.services.agent.tools.builtin.business_query_core.hr.executor import
 )
 from backend.services.agent.tools.builtin.business_query_core.hr.planner import parse_query_spec_input
 from backend.services.agent.tools.builtin.business_query_core.hr.query_spec import QuerySpecValidationError, validate_query_spec
-from backend.services.agent.tools.builtin._fallback_strings import hr_string, reset_hr_language, set_hr_language
+from backend.services.agent.tools.builtin._fallback_strings import (
+    current_hr_language,
+    hr_message,
+    hr_string,
+    reset_hr_language,
+    set_hr_language,
+)
 from backend.services.agent.tools.registry import register_tool
 
 HR_BUSINESS_QUERY_TOOL_NAME = "hr_business_query"
@@ -145,9 +151,11 @@ def run_hr_business_query(
         )
         return _append_unsupported_field_notes(answer, text)
     except QuerySpecValidationError as exc:
-        return compose_hr_error(f"QuerySpec 校验失败：{exc}", include_debug=include_debug, debug={"query": text})
+        message = hr_message("queryspec_validation_failed", current_hr_language()).format(error=exc)
+        return compose_hr_error(message, include_debug=include_debug, debug={"query": text})
     except Exception as exc:
-        return compose_hr_error(f"HR 查询执行失败：{type(exc).__name__}: {exc}", include_debug=include_debug, debug={"query": text})
+        message = hr_message("execution_failed", current_hr_language()).format(error_type=type(exc).__name__, error=exc)
+        return compose_hr_error(message, include_debug=include_debug, debug={"query": text})
     finally:
         reset_hr_language(hr_language_token)
 
@@ -215,8 +223,7 @@ def _looks_like_queryspec_business_query(text: str) -> bool:
 
 def _compose_data_quality_boundary_response(*, include_debug: bool = False, query: str = "") -> str:
     return compose_hr_error(
-        "这是 HR 数据质量/数据治理检查问题，不属于员工业务查询入口。请使用管理员或数据治理工具处理，"
-        "例如独立的 `hr_data_quality_query`、数据巡检任务或数据治理后台。",
+        hr_message("data_quality_boundary_message", current_hr_language()),
         include_debug=include_debug,
         debug={"query": query, "blocked_reason": "data_quality_boundary"},
     )
@@ -225,11 +232,13 @@ def _compose_data_quality_boundary_response(*, include_debug: bool = False, quer
 def _append_unsupported_field_notes(answer: str, query: str) -> str:
     notes = []
     text = str(query or "")
+    language = current_hr_language()
     if any(keyword in text for keyword in ("学历", "学位", "毕业院校", "学校")):
-        notes.append("当前 HR 员工索引未提供学历/学位/毕业院校字段，因此无法从本系统直接查询该信息。")
+        notes.append(hr_message("no_education_field_note", language))
     if not notes:
         return answer
-    return answer.rstrip() + "\n\n### 未覆盖字段\n" + "\n".join(f"- {note}" for note in notes)
+    header = hr_message("unsupported_fields_header", language)
+    return answer.rstrip() + f"\n\n{header}\n" + "\n".join(f"- {note}" for note in notes)
 
 
 def _plan_queryspec(query: str, *, configured: Dict[str, Any], user_id: str, language: Optional[str] = None):

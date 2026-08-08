@@ -7,6 +7,7 @@ import json
 from typing import Any, Dict, Iterable, List
 
 from backend.services.agent.tools.builtin.business_query_core.hr import executor as sample_backend
+from backend.services.agent.tools.builtin._fallback_strings import current_hr_language, hr_message
 
 
 def compose_hr_answer(
@@ -20,21 +21,22 @@ def compose_hr_answer(
     include_sample_rows: bool = True,
     include_debug: bool = False,
 ) -> str:
+    language = current_hr_language()
     rows = list(execution_result.get("rows") or [])
-    output: List[str] = ["### HR 查询结果", ""]
+    output: List[str] = [hr_message("results_title", language), ""]
     output.extend(str(line) for line in execution_result.get("lines") or [])
     output.append("")
-    output.append("### 说明")
-    output.append("- 当前生产入口使用 Elasticsearch HR 索引执行受控查询计划。")
-    output.append("- 统一规划器生成 QueryIR、ES DSL 或内部 QuerySpec；执行器只消费通过校验的受控结构。")
-    output.append("- 权限校验与查询成本控制仍为第一阶段占位。")
+    output.append(hr_message("notes_header", language))
+    output.append(hr_message("note_es_backend", language))
+    output.append(hr_message("note_unified_planner", language))
+    output.append(hr_message("note_placeholder_checks", language))
 
     if include_sample_rows and _should_show_sample_rows(query_spec, execution_result, rows):
         output.append("")
-        output.append("### 匹配人员")
+        output.append(hr_message("matched_people_header", language))
         output.extend(_format_people(rows[:5]))
         if len(rows) > 5:
-            output.append(f"- 另有 {len(rows) - 5} 条未展示。")
+            output.append(hr_message("more_not_shown", language).format(count=len(rows) - 5))
 
     if include_query_spec or include_debug:
         debug_payload: Dict[str, Any] = {
@@ -48,14 +50,14 @@ def compose_hr_answer(
             if execution_result.get("debug"):
                 debug_payload["execution_context"] = execution_result.get("debug")
         output.append("")
-        output.append("### 查询计划与校验")
+        output.append(hr_message("query_plan_header", language))
         output.append(json_block(debug_payload))
 
     return "\n".join(output).strip()
 
 
 def compose_hr_error(message: str, *, include_debug: bool = False, debug: Dict[str, Any] | None = None) -> str:
-    output = ["### HR 查询无法执行", "", message]
+    output = [hr_message("error_title", current_hr_language()), "", message]
     if include_debug and debug:
         output.extend(["", "### Debug", json_block(debug)])
     return "\n".join(output).strip()

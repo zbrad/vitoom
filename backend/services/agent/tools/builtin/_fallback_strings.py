@@ -175,6 +175,10 @@ HR_ATTRIBUTE_TEXT: Dict[str, Dict[str, str]] = {
         "detail_line": "  - {label}: {value}",
         "detail_manager_id_label": "Manager ID",
         "detail_found_header": "Found {total} matching employees:",
+        "person_summary": "{name} ({employee_id}, {department_code}, {grade}, {job_title}, {office_city}, {status})",
+        "status_unknown": "Status unavailable",
+        "none_bullet": "- None",
+        "direct_reports_note": ", direct reports: {count}",
     },
     "Chinese": {
         "unfilled": "未填",
@@ -192,6 +196,10 @@ HR_ATTRIBUTE_TEXT: Dict[str, Dict[str, str]] = {
         "detail_line": "  - {label}：{value}",
         "detail_manager_id_label": "经理 ID",
         "detail_found_header": "找到 {total} 名匹配人员：",
+        "person_summary": "{name}（{employee_id}，{department_code}，{grade}，{job_title}，{office_city}，{status}）",
+        "status_unknown": "状态未返回",
+        "none_bullet": "- 无",
+        "direct_reports_note": "，直接下属 {count} 人",
     },
     "Japanese": {
         "unfilled": "未入力",
@@ -209,6 +217,10 @@ HR_ATTRIBUTE_TEXT: Dict[str, Dict[str, str]] = {
         "detail_line": "  - {label}：{value}",
         "detail_manager_id_label": "マネージャーID",
         "detail_found_header": "該当する社員が{total}名見つかりました：",
+        "person_summary": "{name}（{employee_id}、{department_code}、{grade}、{job_title}、{office_city}、{status}）",
+        "status_unknown": "在籍状況不明",
+        "none_bullet": "- なし",
+        "direct_reports_note": "、直属部下 {count} 名",
     },
 }
 
@@ -228,6 +240,241 @@ def hr_attribute_label(field: str, language: Optional[str]) -> str:
 def hr_attribute_text(key: str, language: Optional[str]) -> str:
     table = HR_ATTRIBUTE_TEXT.get(language or "", HR_ATTRIBUTE_TEXT[DEFAULT_LANGUAGE])
     return table.get(key, HR_ATTRIBUTE_TEXT[DEFAULT_LANGUAGE][key])
+
+
+# Whole-line/whole-sentence templates for the HR sample-backend and ES-mirror
+# report functions in business_query_core/hr/executor.py (section headers,
+# per-row lines, and one-off messages). Kept separate from HR_ATTRIBUTE_TEXT,
+# which holds word/phrase-level fragments (labels, status words, separators)
+# reused across many of these templates.
+HR_MESSAGES: Dict[str, Dict[str, str]] = {
+    "English": {
+        "most_reports_line": (
+            "The employee with the most direct reports is {manager_name} ({manager_id}), "
+            "with {count} active direct reports."
+        ),
+        "cross_timezone_header": "Cross-timezone reporting relationships:",
+        "cross_timezone_none": "No cross-timezone reporting found.",
+        "cross_timezone_line": "- {name} ({from_tz}) -> {manager_name} ({manager_tz})",
+        "manager_reports_line": "{label} ({manager_id}) has {count} active direct reports.",
+        "no_manager_header": "There are {count} employees with no manager specified:",
+        "invalid_manager_header": "Records with a nonexistent manager ID: {count}.",
+        "invalid_email_header": "Records with malformed email addresses: {count}.",
+        "duplicate_id_header": "Duplicate employee IDs: {count}.",
+        "duplicate_id_note": (
+            "- No duplicate employee IDs found in the sample primary index; production should "
+            "detect these at the raw-data layer."
+        ),
+        "duplicate_id_es_note": (
+            "Duplicate employee IDs: the primary employee index uses `_id=employee_id`, so "
+            "duplicates get overwritten; detect these in the raw JSONL or the original data layer instead."
+        ),
+        "fte_hours_conflict_header": "Records with FTE 0.5 but standard hours 40: {count}.",
+        "missing_fields_header": "Records missing key fields (department, grade): {count}.",
+        "resume_summary_found_header": "Found {count} resume summaries:",
+        "resume_summary_line": "- {name} ({employee_id}): {summary}",
+        "resume_material_found_header": "Found {count} resume records:",
+        "no_identified_person": (
+            "No specific person identified; try entering a name or employee ID, or filter the "
+            "employee list first."
+        ),
+        "no_resume_summary": "No resume summary",
+        "no_mock_link": "No mock link",
+        "resume_line": "- {name} ({employee_id}): {summary}; asset: {storage_uri}",
+        "distribution_header": "Matched {count} employees; distribution by `{field}`:",
+        "distribution_line": "- {key}: {count} ({ratio:.1f}%)",
+        "avg_tenure_line": "Matched {count} active employees; average tenure is about {avg:.1f} years.",
+        "matched_total_line": "Matched {count} employees total.",
+        "filtered_note": "Counted using the filters from QuerySpec.",
+        "married_ratio_line": "{count} married employees, {ratio:.1f}% of all employees.",
+        "pay_scale_fte_header": "Average FTE by pay scale grade:",
+        "pay_scale_fte_line": "- {key}: average FTE {avg:.2f}, sample size {count}",
+        "standard_hours_ratio_line": "{count} employees have standard hours of 40, {ratio:.1f}% of all employees.",
+        "matched_returned_line": "Matched {total} employees total; showing the first {n}:",
+        "aggregation_header_with_total": "Matched {total} employees total; aggregation results:",
+        "aggregation_bucket_line": "  - {key}: {count}",
+        "aggregation_field_header": "- {name}:",
+        "aggregation_value_line": "- {name}: {value}",
+        "please_specify_field": (
+            "Please specify which employee field to query, e.g. office location, employee ID, "
+            "email, or department."
+        ),
+        "clarify_query": "Please provide more query details.",
+        "retired_terminated_header": "Retired or terminated employees: {count} total:",
+        "manager_grade_header": "Manager-grade employees with more than 3 direct reports: {count} total:",
+        "tenure_sort_header": "Filtered by {label} tenure; matched {count} employees total, showing the first {n}:",
+        "tenure_label_longest": "longest",
+        "tenure_label_shortest": "shortest",
+        "tenure_threshold_header": (
+            "Employees with more than {threshold:g} years of tenure meeting the criteria: {count} total:"
+        ),
+        "city_comparison_header": "Reporting-relationship comparison between {city1} and {city2}:",
+        "city_comparison_line": (
+            "- {city}: {count} employees, {managers} direct managers involved, {cross} cross-city reports."
+        ),
+        "results_title": "### HR Query Results",
+        "notes_header": "### Notes",
+        "note_es_backend": "- The current production entry point runs controlled query plans against the Elasticsearch HR index.",
+        "note_unified_planner": (
+            "- The unified planner produces QueryIR, ES DSL, or an internal QuerySpec; the executor only "
+            "consumes validated, controlled structures."
+        ),
+        "note_placeholder_checks": "- Permission checks and query cost control are still first-phase placeholders.",
+        "matched_people_header": "### Matched Employees",
+        "more_not_shown": "- {count} more not shown.",
+        "query_plan_header": "### Query Plan & Validation",
+        "error_title": "### HR Query Could Not Be Executed",
+        "queryspec_validation_failed": "QuerySpec validation failed: {error}",
+        "execution_failed": "HR query execution failed: {error_type}: {error}",
+        "data_quality_boundary_message": (
+            "This is an HR data quality/data governance check, not an employee business query. Please use an "
+            "admin or data governance tool instead, such as the standalone `hr_data_quality_query`, a data "
+            "inspection job, or the data governance backend."
+        ),
+        "unsupported_fields_header": "### Unsupported Fields",
+        "no_education_field_note": (
+            "The current HR employee index does not provide education/degree/school fields, so this system "
+            "cannot answer that directly."
+        ),
+    },
+    "Chinese": {
+        "most_reports_line": "直接下属最多的是 {manager_name}（{manager_id}），共有 {count} 名在职直接下属。",
+        "cross_timezone_header": "跨时区汇报情况如下：",
+        "cross_timezone_none": "未发现跨时区汇报。",
+        "cross_timezone_line": "- {name}（{from_tz}） -> {manager_name}（{manager_tz}）",
+        "manager_reports_line": "{label}（{manager_id}）共有 {count} 名在职直接下属。",
+        "no_manager_header": "没有指定经理的员工共有 {count} 名：",
+        "invalid_manager_header": "经理 ID 不存在的记录：{count} 条。",
+        "invalid_email_header": "邮箱格式异常的记录：{count} 条。",
+        "duplicate_id_header": "重复员工 ID：{count} 个。",
+        "duplicate_id_note": "- 样例主索引中未发现重复员工 ID；真实场景应在原始数据层检测。",
+        "duplicate_id_es_note": "重复员工 ID：主员工索引用 `_id=employee_id` 会覆盖重复；请在 raw JSONL 或原始数据层检测。",
+        "fte_hours_conflict_header": "FTE 为 0.5 但标准工时为 40 的记录：{count} 条。",
+        "missing_fields_header": "缺失关键字段（部门、职级）的记录：{count} 条。",
+        "resume_summary_found_header": "找到 {count} 份简历摘要：",
+        "resume_summary_line": "- {name}（{employee_id}）：{summary}",
+        "resume_material_found_header": "找到 {count} 份简历资料：",
+        "no_identified_person": "未识别到明确人员；可尝试输入姓名、员工 ID，或先筛选人员列表。",
+        "no_resume_summary": "无简历摘要",
+        "no_mock_link": "无模拟链接",
+        "resume_line": "- {name}（{employee_id}）：{summary}；资产：{storage_uri}",
+        "distribution_header": "匹配员工共 {count} 人，按 `{field}` 分布如下：",
+        "distribution_line": "- {key}：{count} 人（{ratio:.1f}%）",
+        "avg_tenure_line": "匹配在职员工 {count} 人，平均司龄约 {avg:.1f} 年。",
+        "matched_total_line": "匹配员工共 {count} 人。",
+        "filtered_note": "已按 QuerySpec 中的过滤条件统计。",
+        "married_ratio_line": "已婚员工 {count} 人，占全部员工 {ratio:.1f}%。",
+        "pay_scale_fte_header": "各薪酬等级的平均 FTE 如下：",
+        "pay_scale_fte_line": "- {key}：平均 FTE {avg:.2f}，样本 {count} 人",
+        "standard_hours_ratio_line": "标准工时为 40 小时的员工 {count} 人，占全部员工 {ratio:.1f}%。",
+        "matched_returned_line": "匹配员工共 {total} 人，返回前 {n} 人：",
+        "aggregation_header_with_total": "匹配员工共 {total} 人，聚合结果如下：",
+        "aggregation_bucket_line": "  - {key}：{count} 人",
+        "aggregation_field_header": "- {name}：",
+        "aggregation_value_line": "- {name}：{value}",
+        "please_specify_field": "请说明要查询员工的哪个字段，例如办公地点、工号、邮箱或部门。",
+        "clarify_query": "请补充查询条件。",
+        "retired_terminated_header": "已退休或已解雇/离职人员共 {count} 人：",
+        "manager_grade_header": "经理级且直接下属 > 3 人的员工共 {count} 人：",
+        "tenure_sort_header": "按入职年限{label}筛选，匹配员工共 {count} 人，返回前 {n} 人：",
+        "tenure_label_longest": "最长",
+        "tenure_label_shortest": "最短",
+        "tenure_threshold_header": "入职超过 {threshold:g} 年且满足条件的员工共 {count} 人：",
+        "city_comparison_header": "{city1}和{city2}两地人员汇报关系对比：",
+        "city_comparison_line": "- {city}：员工 {count} 人，涉及直属经理 {managers} 位，跨城市汇报 {cross} 人。",
+        "results_title": "### HR 查询结果",
+        "notes_header": "### 说明",
+        "note_es_backend": "- 当前生产入口使用 Elasticsearch HR 索引执行受控查询计划。",
+        "note_unified_planner": "- 统一规划器生成 QueryIR、ES DSL 或内部 QuerySpec；执行器只消费通过校验的受控结构。",
+        "note_placeholder_checks": "- 权限校验与查询成本控制仍为第一阶段占位。",
+        "matched_people_header": "### 匹配人员",
+        "more_not_shown": "- 另有 {count} 条未展示。",
+        "query_plan_header": "### 查询计划与校验",
+        "error_title": "### HR 查询无法执行",
+        "queryspec_validation_failed": "QuerySpec 校验失败：{error}",
+        "execution_failed": "HR 查询执行失败：{error_type}: {error}",
+        "data_quality_boundary_message": (
+            "这是 HR 数据质量/数据治理检查问题，不属于员工业务查询入口。请使用管理员或数据治理工具处理，"
+            "例如独立的 `hr_data_quality_query`、数据巡检任务或数据治理后台。"
+        ),
+        "unsupported_fields_header": "### 未覆盖字段",
+        "no_education_field_note": "当前 HR 员工索引未提供学历/学位/毕业院校字段，因此无法从本系统直接查询该信息。",
+    },
+    "Japanese": {
+        "most_reports_line": "直属部下が最も多いのは{manager_name}（{manager_id}）で、在籍中の直属部下は{count}名です。",
+        "cross_timezone_header": "タイムゾーンをまたぐ報告関係は以下の通りです：",
+        "cross_timezone_none": "タイムゾーンをまたぐ報告関係は見つかりませんでした。",
+        "cross_timezone_line": "- {name}（{from_tz}） -> {manager_name}（{manager_tz}）",
+        "manager_reports_line": "{label}（{manager_id}）には在籍中の直属部下が{count}名います。",
+        "no_manager_header": "経理が指定されていない社員は{count}名です：",
+        "invalid_manager_header": "存在しないマネージャーIDのレコード：{count}件。",
+        "invalid_email_header": "メール形式が不正なレコード：{count}件。",
+        "duplicate_id_header": "重複した社員ID：{count}件。",
+        "duplicate_id_note": "- サンプルの主インデックスでは重複した社員IDは見つかりませんでした。実運用では生データ層で検出してください。",
+        "duplicate_id_es_note": "重複した社員ID：主インデックスは `_id=employee_id` を使用しているため重複は上書きされます。raw JSONL または元データ層で検出してください。",
+        "fte_hours_conflict_header": "FTEが0.5なのに標準労働時間が40のレコード：{count}件。",
+        "missing_fields_header": "重要フィールド（部門、グレード）が欠落しているレコード：{count}件。",
+        "resume_summary_found_header": "{count}件の履歴書要約が見つかりました：",
+        "resume_summary_line": "- {name}（{employee_id}）：{summary}",
+        "resume_material_found_header": "{count}件の履歴書資料が見つかりました：",
+        "no_identified_person": "対象となる社員を特定できませんでした。氏名や社員IDを入力するか、先に社員リストを絞り込んでください。",
+        "no_resume_summary": "履歴書要約なし",
+        "no_mock_link": "モックリンクなし",
+        "resume_line": "- {name}（{employee_id}）：{summary}；資産：{storage_uri}",
+        "distribution_header": "該当する社員は{count}名です。`{field}`別の分布は以下の通りです：",
+        "distribution_line": "- {key}：{count}名（{ratio:.1f}%）",
+        "avg_tenure_line": "該当する在籍社員は{count}名で、平均勤続年数は約{avg:.1f}年です。",
+        "matched_total_line": "該当する社員は合計{count}名です。",
+        "filtered_note": "QuerySpec のフィルタ条件で集計済みです。",
+        "married_ratio_line": "既婚社員は{count}名で、全社員の{ratio:.1f}%です。",
+        "pay_scale_fte_header": "各給与等級の平均FTEは以下の通りです：",
+        "pay_scale_fte_line": "- {key}：平均FTE {avg:.2f}、サンプル数{count}名",
+        "standard_hours_ratio_line": "標準労働時間が40時間の社員は{count}名で、全社員の{ratio:.1f}%です。",
+        "matched_returned_line": "該当する社員は合計{total}名です。先頭{n}名を表示します：",
+        "aggregation_header_with_total": "該当する社員は合計{total}名です。集計結果は以下の通りです：",
+        "aggregation_bucket_line": "  - {key}：{count}名",
+        "aggregation_field_header": "- {name}：",
+        "aggregation_value_line": "- {name}：{value}",
+        "please_specify_field": "問い合わせたい社員のフィールドを指定してください（例：勤務地、社員ID、メール、部門など）。",
+        "clarify_query": "検索条件を補足してください。",
+        "retired_terminated_header": "退職・解雇済みの社員は合計{count}名です：",
+        "manager_grade_header": "マネージャー職級かつ直属部下が3名を超える社員は合計{count}名です：",
+        "tenure_sort_header": "在職期間が{label}の順にフィルタしました。該当する社員は合計{count}名で、先頭{n}名を表示します：",
+        "tenure_label_longest": "最長",
+        "tenure_label_shortest": "最短",
+        "tenure_threshold_header": "在職期間が{threshold:g}年を超え、条件を満たす社員は合計{count}名です：",
+        "city_comparison_header": "{city1}と{city2}の間の報告関係比較：",
+        "city_comparison_line": "- {city}：社員{count}名、関係する直属マネージャー{managers}名、都市をまたぐ報告{cross}名。",
+        "results_title": "### HR照会結果",
+        "notes_header": "### 補足",
+        "note_es_backend": "- 現在の本番エントリーポイントは、Elasticsearch の HR インデックスに対して制御されたクエリプランを実行します。",
+        "note_unified_planner": (
+            "- 統合プランナーが QueryIR、ES DSL、または内部 QuerySpec を生成し、実行器は検証済みの制御された構造のみを受け付けます。"
+        ),
+        "note_placeholder_checks": "- 権限チェックとクエリコスト制御は、現時点では第一段階のプレースホルダーです。",
+        "matched_people_header": "### 該当社員",
+        "more_not_shown": "- 他{count}件は表示していません。",
+        "query_plan_header": "### クエリプランと検証",
+        "error_title": "### HR照会を実行できませんでした",
+        "queryspec_validation_failed": "QuerySpec の検証に失敗しました：{error}",
+        "execution_failed": "HR照会の実行に失敗しました：{error_type}: {error}",
+        "data_quality_boundary_message": (
+            "これはHRデータ品質・データガバナンスのチェックであり、社員業務照会の入口ではありません。"
+            "管理者用ツールまたはデータガバナンスツール（例：独立した `hr_data_quality_query`、"
+            "データ点検ジョブ、データガバナンス基盤）をご利用ください。"
+        ),
+        "unsupported_fields_header": "### 未対応フィールド",
+        "no_education_field_note": (
+            "現在のHR社員インデックスには学歴・学位・出身校のフィールドがないため、"
+            "本システムから直接この情報を照会することはできません。"
+        ),
+    },
+}
+
+
+def hr_message(key: str, language: Optional[str]) -> str:
+    table = HR_MESSAGES.get(language or "", HR_MESSAGES[DEFAULT_LANGUAGE])
+    return table.get(key, HR_MESSAGES[DEFAULT_LANGUAGE][key])
 
 
 def kb_headers(language: Optional[str]) -> Dict[str, str]:

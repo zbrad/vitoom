@@ -26,6 +26,7 @@ from backend.services.agent.tools.builtin._fallback_strings import (
     hr_attribute_label,
     hr_attribute_text,
     hr_field_label,
+    hr_message,
     hr_string,
 )
 from backend.services.agent.tools.builtin.business_query_core.executor_base import (
@@ -697,10 +698,16 @@ def _tenure_years(record: EmployeeRecord) -> float:
 
 
 def _format_person(record: EmployeeRecord) -> str:
-    status = "在职" if _is_active(record) else "非在职"
-    return (
-        f"{record.name}（{record.employee_id}，{record.department_code}，{record.grade}，"
-        f"{record.job_title}，{record.office_city}，{status}）"
+    language = current_hr_language()
+    status = hr_attribute_text("active", language) if _is_active(record) else hr_attribute_text("inactive", language)
+    return hr_attribute_text("person_summary", language).format(
+        name=record.name,
+        employee_id=record.employee_id,
+        department_code=record.department_code,
+        grade=record.grade,
+        job_title=record.job_title,
+        office_city=record.office_city,
+        status=status,
     )
 
 
@@ -716,17 +723,22 @@ def _doc_get(record: Any, field: str, default: Any = "") -> Any:
 
 
 def _format_any_person(record: Any) -> str:
+    language = current_hr_language()
     employment_status = _doc_get(record, "employment_status", None)
     if employment_status == "active":
-        status = "在职"
+        status = hr_attribute_text("active", language)
     elif employment_status in {"terminated", "retired"}:
-        status = "非在职"
+        status = hr_attribute_text("inactive", language)
     else:
-        status = "状态未返回"
-    return (
-        f"{_doc_get(record, 'name')}（{_doc_get(record, 'employee_id')}，"
-        f"{_doc_get(record, 'department_code')}，{_doc_get(record, 'grade')}，"
-        f"{_doc_get(record, 'job_title')}，{_doc_get(record, 'office_city')}，{status}）"
+        status = hr_attribute_text("status_unknown", language)
+    return hr_attribute_text("person_summary", language).format(
+        name=_doc_get(record, "name"),
+        employee_id=_doc_get(record, "employee_id"),
+        department_code=_doc_get(record, "department_code"),
+        grade=_doc_get(record, "grade"),
+        job_title=_doc_get(record, "job_title"),
+        office_city=_doc_get(record, "office_city"),
+        status=status,
     )
 
 
@@ -967,28 +979,29 @@ def _placeholder_cost_check(query_spec: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _execute_aggregation(query_spec: Dict[str, Any]) -> Tuple[List[str], List[EmployeeRecord]]:
+    language = current_hr_language()
     records = _apply_filters(_EMPLOYEES, query_spec.get("filters") or [])
     group_by = list(query_spec.get("group_by") or [])
     lines: List[str] = []
     if group_by:
         field = group_by[0]
-        counter = Counter(str(getattr(record, field, "") or "未填") for record in records)
-        lines.append(f"匹配员工共 {len(records)} 人，按 `{field}` 分布如下：")
+        counter = Counter(str(getattr(record, field, "") or hr_attribute_text("unfilled", language)) for record in records)
+        lines.append(hr_message("distribution_header", language).format(count=len(records), field=field))
         for key, count in sorted(counter.items(), key=lambda item: (-item[1], item[0])):
             ratio = (count / len(records) * 100) if records else 0.0
-            lines.append(f"- {key}：{count} 人（{ratio:.1f}%）")
+            lines.append(hr_message("distribution_line", language).format(key=key, count=count, ratio=ratio))
         return lines, records
 
     metrics = list(query_spec.get("metrics") or [])
     if metrics and metrics[0].get("type") == "avg" and metrics[0].get("field") == "tenure_years":
         active_records = [record for record in records if _is_active(record)]
         avg = sum(_tenure_years(record) for record in active_records) / len(active_records) if active_records else 0.0
-        lines.append(f"匹配在职员工 {len(active_records)} 人，平均司龄约 {avg:.1f} 年。")
+        lines.append(hr_message("avg_tenure_line", language).format(count=len(active_records), avg=avg))
         return lines, active_records
 
-    lines.append(f"匹配员工共 {len(records)} 人。")
+    lines.append(hr_message("matched_total_line", language).format(count=len(records)))
     if query_spec.get("filters"):
-        lines.append("已按 QuerySpec 中的过滤条件统计。")
+        lines.append(hr_message("filtered_note", language))
     return lines, records
 
 
@@ -1006,12 +1019,13 @@ def _execute_list(query_spec: Dict[str, Any], text: str) -> Tuple[List[str], Lis
         ]
     else:
         records = _apply_filters(_EMPLOYEES, filters)
-    lines = [f"找到 {len(records)} 名匹配人员："]
+    lines = [hr_attribute_text("detail_found_header", current_hr_language()).format(total=len(records))]
     lines.extend(_format_people(records))
     return lines, records
 
 
 def _execute_relationship(text: str) -> Tuple[List[str], List[EmployeeRecord], Dict[str, Any]]:
+    language = current_hr_language()
     by_id = {record.employee_id: record for record in _EMPLOYEES}
     active_records = [record for record in _EMPLOYEES if _is_active(record)]
     if "下属最多" in text:
@@ -1020,22 +1034,24 @@ def _execute_relationship(text: str) -> Tuple[List[str], List[EmployeeRecord], D
         manager = by_id.get(manager_id)
         manager_name = manager.name if manager else manager_id
         reports = [record for record in active_records if record.manager_id == manager_id]
-        lines = [f"直接下属最多的是 {manager_name}（{manager_id}），共有 {count} 名在职直接下属。"]
+        lines = [hr_message("most_reports_line", language).format(manager_name=manager_name, manager_id=manager_id, count=count)]
         lines.extend(_format_people(reports))
         return lines, reports, {"manager_id": manager_id}
 
     if "跨时区" in text:
         records: List[EmployeeRecord] = []
-        lines = ["跨时区汇报情况如下："]
+        lines = [hr_message("cross_timezone_header", language)]
         for record in active_records:
             manager = by_id.get(record.manager_id)
             if manager and manager.timezone != record.timezone:
                 records.append(record)
                 lines.append(
-                    f"- {record.name}（{record.timezone}） -> {manager.name}（{manager.timezone}）"
+                    hr_message("cross_timezone_line", language).format(
+                        name=record.name, from_tz=record.timezone, manager_name=manager.name, manager_tz=manager.timezone
+                    )
                 )
         if not records:
-            lines.append("未发现跨时区汇报。")
+            lines.append(hr_message("cross_timezone_none", language))
         return lines, records, {"relationship": "cross_timezone_reporting"}
 
     matched_people = _find_people_by_query(text)
@@ -1046,17 +1062,18 @@ def _execute_relationship(text: str) -> Tuple[List[str], List[EmployeeRecord], D
         reports = [record for record in active_records if record.manager_id == manager_id]
         manager = by_id.get(manager_id)
         label = manager.name if manager else manager_id
-        lines = [f"{label}（{manager_id}）共有 {len(reports)} 名在职直接下属。"]
+        lines = [hr_message("manager_reports_line", language).format(label=label, manager_id=manager_id, count=len(reports))]
         lines.extend(_format_people(reports))
         return lines, reports, {"manager_id": manager_id}
 
     records = [record for record in _EMPLOYEES if not record.manager_id]
-    lines = [f"没有指定经理的员工共有 {len(records)} 名："]
+    lines = [hr_message("no_manager_header", language).format(count=len(records))]
     lines.extend(_format_people(records))
     return lines, records, {"relationship": "missing_manager"}
 
 
 def _execute_quality_check(query_spec: Dict[str, Any]) -> Tuple[List[str], List[EmployeeRecord]]:
+    language = current_hr_language()
     check = str(query_spec.get("check") or "all_quality_checks")
     by_id = {record.employee_id: record for record in _EMPLOYEES}
     records: List[EmployeeRecord] = []
@@ -1066,34 +1083,39 @@ def _execute_quality_check(query_spec: Dict[str, Any]) -> Tuple[List[str], List[
             record for record in _EMPLOYEES if record.manager_id and record.manager_id not in by_id
         ]
         records.extend(invalid_manager)
-        lines.append(f"经理 ID 不存在的记录：{len(invalid_manager)} 条。")
-        lines.extend(_format_people(invalid_manager, empty_text="- 无"))
+        lines.append(hr_message("invalid_manager_header", language).format(count=len(invalid_manager)))
+        lines.extend(_format_people(invalid_manager, empty_text=hr_attribute_text("none_bullet", language)))
     if check in {"invalid_email", "all_quality_checks"}:
         invalid_email = [record for record in _EMPLOYEES if not _EMAIL_RE.match(record.email)]
         records.extend(invalid_email)
-        lines.append(f"邮箱格式异常的记录：{len(invalid_email)} 条。")
-        lines.extend(_format_people(invalid_email, empty_text="- 无"))
+        lines.append(hr_message("invalid_email_header", language).format(count=len(invalid_email)))
+        lines.extend(_format_people(invalid_email, empty_text=hr_attribute_text("none_bullet", language)))
     if check in {"duplicate_employee_id", "all_quality_checks"}:
         id_counter = Counter(record.employee_id for record in _EMPLOYEES)
         duplicate_ids = sorted(employee_id for employee_id, count in id_counter.items() if count > 1)
-        lines.append(f"重复员工 ID：{len(duplicate_ids)} 个。")
+        lines.append(hr_message("duplicate_id_header", language).format(count=len(duplicate_ids)))
         if duplicate_ids:
             lines.extend(f"- {employee_id}" for employee_id in duplicate_ids)
         else:
-            lines.append("- 样例主索引中未发现重复员工 ID；真实场景应在原始数据层检测。")
+            lines.append(hr_message("duplicate_id_note", language))
     deduped = list({record.employee_id: record for record in records}.values())
     return lines, deduped
 
 
 def _execute_document_fetch(query_spec: Dict[str, Any], text: str) -> Tuple[List[str], List[EmployeeRecord]]:
+    language = current_hr_language()
     records = _find_people_by_query(text)
     if not records:
         records = _apply_filters(_EMPLOYEES, query_spec.get("filters") or [])[:3]
-    lines = [f"找到 {len(records)} 份简历摘要："]
+    lines = [hr_message("resume_summary_found_header", language).format(count=len(records))]
     for record in records:
-        lines.append(f"- {record.name}（{record.employee_id}）：{record.resume_summary}")
+        lines.append(
+            hr_message("resume_summary_line", language).format(
+                name=record.name, employee_id=record.employee_id, summary=record.resume_summary
+            )
+        )
     if not records:
-        lines.append("- 未识别到明确人员；可尝试输入姓名、员工 ID，或先筛选人员列表。")
+        lines.append(f"- {hr_message('no_identified_person', language)}")
     return lines, records
 
 
@@ -1220,6 +1242,7 @@ def _execute_es_aggregation(
     config: Dict[str, Any],
     query_spec: Dict[str, Any],
 ) -> Tuple[List[str], List[Dict[str, Any]], Dict[str, Any]]:
+    language = current_hr_language()
     employee_index = str(config.get("employee_index") or "")
     filters = list(query_spec.get("filters") or [])
     case = str(query_spec.get("case") or "")
@@ -1233,7 +1256,7 @@ def _execute_es_aggregation(
         total = sum(int(bucket.get("doc_count") or 0) for bucket in buckets)
         married = sum(int(bucket.get("doc_count") or 0) for bucket in buckets if bucket.get("key") == "已婚")
         ratio = (married / total * 100) if total else 0.0
-        return [f"已婚员工 {married} 人，占全部员工 {ratio:.1f}%。"], [], {"buckets": buckets}
+        return [hr_message("married_ratio_line", language).format(count=married, ratio=ratio)], [], {"buckets": buckets}
     if case in {"fte_distribution", "employment_type_distribution"}:
         field = "fte" if case == "fte_distribution" else "employment_type"
         query_spec = dict(query_spec)
@@ -1252,10 +1275,14 @@ def _execute_es_aggregation(
         }
         response = _es_search(config, employee_index, body)
         buckets = response.get("aggregations", {}).get("by_pay_scale_group", {}).get("buckets", [])
-        lines = ["各薪酬等级的平均 FTE 如下："]
+        lines = [hr_message("pay_scale_fte_header", language)]
         for bucket in buckets:
             avg_fte = bucket.get("avg_fte", {}).get("value") or 0
-            lines.append(f"- {bucket.get('key')}：平均 FTE {avg_fte:.2f}，样本 {bucket.get('doc_count')} 人")
+            lines.append(
+                hr_message("pay_scale_fte_line", language).format(
+                    key=bucket.get("key"), avg=avg_fte, count=bucket.get("doc_count")
+                )
+            )
         return lines, [], {"es_query": body}
     if case == "standard_hours_40_ratio":
         response = _es_search(config, employee_index, {"size": 0, "query": {"match_all": {}}})
@@ -1263,7 +1290,7 @@ def _execute_es_aggregation(
         matched = _es_search(config, employee_index, {"size": 0, "query": {"term": {"standard_hours": 40}}})
         count = _es_total(matched)
         ratio = (count / total * 100) if total else 0.0
-        return [f"标准工时为 40 小时的员工 {count} 人，占全部员工 {ratio:.1f}%。"], [], {"total": total}
+        return [hr_message("standard_hours_ratio_line", language).format(count=count, ratio=ratio)], [], {"total": total}
     if case == "office_department_distribution":
         query_spec = dict(query_spec)
         query_spec["group_by"] = ["department_code"]
@@ -1278,11 +1305,11 @@ def _execute_es_aggregation(
         response = _es_search(config, employee_index, body)
         total = _es_total(response)
         buckets = response.get("aggregations", {}).get("distribution", {}).get("buckets", [])
-        lines = [f"匹配员工共 {total} 人，按 `{field}` 分布如下："]
+        lines = [hr_message("distribution_header", language).format(count=total, field=field)]
         for bucket in buckets:
             count = int(bucket.get("doc_count") or 0)
             ratio = (count / total * 100) if total else 0.0
-            lines.append(f"- {bucket.get('key')}：{count} 人（{ratio:.1f}%）")
+            lines.append(hr_message("distribution_line", language).format(key=bucket.get("key"), count=count, ratio=ratio))
         return lines, [], {"es_query": body}
 
     metrics = list(query_spec.get("metrics") or [])
@@ -1301,14 +1328,14 @@ def _execute_es_aggregation(
             except Exception:
                 continue
         avg = sum(tenures) / len(tenures) if tenures else 0.0
-        return [f"匹配在职员工 {len(tenures)} 人，平均司龄约 {avg:.1f} 年。"], docs[:5], {"es_query": response}
+        return [hr_message("avg_tenure_line", language).format(count=len(tenures), avg=avg)], docs[:5], {"es_query": response}
 
     response = _es_search(config, employee_index, {"size": 5, "query": _es_bool_query(filters)})
     docs = _es_hits_to_docs(response)
     total = _es_total(response)
-    lines = [f"匹配员工共 {total} 人。"]
+    lines = [hr_message("matched_total_line", language).format(count=total)]
     if filters:
-        lines.append("已按 QuerySpec 中的过滤条件统计。")
+        lines.append(hr_message("filtered_note", language))
     return lines, docs, {"es_total": total}
 
 
@@ -1317,6 +1344,7 @@ def _execute_es_list(
     query_spec: Dict[str, Any],
     text: str,
 ) -> Tuple[List[str], List[Dict[str, Any]], Dict[str, Any]]:
+    language = current_hr_language()
     employee_index = str(config.get("employee_index") or "")
     case = str(query_spec.get("case") or "")
     if case == "inactive_employee_list":
@@ -1327,7 +1355,7 @@ def _execute_es_list(
         }
         response = _es_search(config, employee_index, body)
         docs = _es_hits_to_docs(response)
-        lines = [f"已退休或已解雇/离职人员共 {_es_total(response)} 人："]
+        lines = [hr_message("retired_terminated_header", language).format(count=_es_total(response))]
         lines.extend(_format_any_people(docs))
         return lines, docs, {"es_query": body}
     if case == "low_perf_high_risk":
@@ -1351,9 +1379,12 @@ def _execute_es_list(
             for doc in docs
             if int(doc.get("grade_level") or 0) >= 10 and report_counter.get(str(doc.get("employee_id")), 0) > 3
         ]
-        lines = [f"经理级且直接下属 > 3 人的员工共 {len(managers)} 人："]
+        lines = [hr_message("manager_grade_header", language).format(count=len(managers))]
         for doc in managers:
-            lines.append(f"- {_format_any_person(doc)}，直接下属 {report_counter.get(str(doc.get('employee_id')), 0)} 人")
+            note = hr_attribute_text("direct_reports_note", language).format(
+                count=report_counter.get(str(doc.get("employee_id")), 0)
+            )
+            lines.append(f"- {_format_any_person(doc)}{note}")
         return lines, managers, {"computed_from_docs": len(docs)}
     sort_items = list(query_spec.get("sort") or [])
     if any(str(item.get("field")) == "tenure_years" for item in sort_items if isinstance(item, dict)):
@@ -1376,10 +1407,12 @@ def _execute_es_list(
         docs.sort(key=_doc_tenure_years, reverse=direction == "desc")
         limit = int(query_spec.get("limit") or 20)
         selected = docs[:limit]
-        label = "最长" if direction == "desc" else "最短"
-        lines = [f"按入职年限{label}筛选，匹配员工共 {len(docs)} 人，返回前 {len(selected)} 人："]
+        label = hr_message("tenure_label_longest", language) if direction == "desc" else hr_message("tenure_label_shortest", language)
+        lines = [hr_message("tenure_sort_header", language).format(label=label, count=len(docs), n=len(selected))]
         for doc in selected:
-            lines.append(f"- {_format_any_person(doc)}，入职年限约 {_doc_tenure_years(doc):.1f} 年")
+            tenure_value = hr_attribute_text("tenure_years", language).format(value=_doc_tenure_years(doc))
+            note = hr_attribute_text("tenure_note", language).format(value=tenure_value)
+            lines.append(f"- {_format_any_person(doc)}{note}")
         return lines, selected, {"computed_from_docs": len(docs), "computed_sort": "tenure_years"}
     if any(str(item.get("field")) == "tenure_years" for item in query_spec.get("filters") or []):
         docs = _es_fetch_all_employees(config)
@@ -1400,7 +1433,7 @@ def _execute_es_list(
                 if cond.get("field") not in {"tenure_years"}
             )
         ]
-        lines = [f"入职超过 {threshold:g} 年且满足条件的员工共 {len(docs)} 人："]
+        lines = [hr_message("tenure_threshold_header", language).format(threshold=threshold, count=len(docs))]
         lines.extend(_format_any_people(docs))
         return lines, docs, {"computed_from_docs": len(docs)}
     must: List[Dict[str, Any]] = []
@@ -1420,12 +1453,13 @@ def _execute_es_list(
     }
     response = _es_search(config, employee_index, body)
     docs = _es_hits_to_docs(response)
-    lines = [f"找到 {_es_total(response)} 名匹配人员："]
+    lines = [hr_attribute_text("detail_found_header", language).format(total=_es_total(response))]
     lines.extend(_format_any_people(docs))
     return lines, docs, {"es_query": body}
 
 
 def _execute_es_relationship(config: Dict[str, Any], text: str) -> Tuple[List[str], List[Dict[str, Any]], Dict[str, Any]]:
+    language = current_hr_language()
     employee_index = str(config.get("employee_index") or "")
     if _contains_any(text, ("经理级", "直接下属 > 3", "直接下属>3")):
         docs = _es_fetch_all_employees(config)
@@ -1436,14 +1470,17 @@ def _execute_es_relationship(config: Dict[str, Any], text: str) -> Tuple[List[st
             for doc in docs
             if int(doc.get("grade_level") or 0) >= 10 and report_counter.get(str(doc.get("employee_id")), 0) > 3
         ]
-        lines = [f"经理级且直接下属 > 3 人的员工共 {len(managers)} 人："]
+        lines = [hr_message("manager_grade_header", language).format(count=len(managers))]
         for doc in managers:
-            lines.append(f"- {_format_any_person(doc)}，直接下属 {report_counter.get(str(doc.get('employee_id')), 0)} 人")
+            note = hr_attribute_text("direct_reports_note", language).format(
+                count=report_counter.get(str(doc.get("employee_id")), 0)
+            )
+            lines.append(f"- {_format_any_person(doc)}{note}")
         return lines, managers, {"computed_from_docs": len(docs)}
     if "北京" in text and "上海" in text and "汇报关系对比" in text:
         docs = _es_fetch_all_employees(config)
         by_id = {str(doc.get("employee_id")): doc for doc in docs}
-        lines = ["北京和上海两地人员汇报关系对比："]
+        lines = [hr_message("city_comparison_header", language).format(city1="北京", city2="上海")]
         rows: List[Dict[str, Any]] = []
         for city in ("北京", "上海"):
             city_docs = [doc for doc in docs if doc.get("office_city") == city]
@@ -1453,7 +1490,11 @@ def _execute_es_relationship(config: Dict[str, Any], text: str) -> Tuple[List[st
                 if doc.get("manager_id") and by_id.get(str(doc.get("manager_id")), {}).get("office_city") not in {"", None, city}
             ]
             rows.extend(cross_city)
-            lines.append(f"- {city}：员工 {len(city_docs)} 人，涉及直属经理 {len(managers)} 位，跨城市汇报 {len(cross_city)} 人。")
+            lines.append(
+                hr_message("city_comparison_line", language).format(
+                    city=city, count=len(city_docs), managers=len(managers), cross=len(cross_city)
+                )
+            )
         return lines, rows, {"relationship": "beijing_shanghai_reporting_compare"}
     if "下属最多" in text:
         body = {
@@ -1474,7 +1515,7 @@ def _execute_es_relationship(config: Dict[str, Any], text: str) -> Tuple[List[st
         manager_docs = _es_hits_to_docs(manager_response)
         manager_name = manager_docs[0].get("name") if manager_docs else manager_id
         reports = _es_hits_to_docs(reports_response)
-        lines = [f"直接下属最多的是 {manager_name}（{manager_id}），共有 {count} 名在职直接下属。"]
+        lines = [hr_message("most_reports_line", language).format(manager_name=manager_name, manager_id=manager_id, count=count)]
         lines.extend(_format_any_people(reports))
         return lines, reports, {"manager_id": manager_id}
 
@@ -1483,14 +1524,18 @@ def _execute_es_relationship(config: Dict[str, Any], text: str) -> Tuple[List[st
         docs = _es_hits_to_docs(response)
         by_id = {str(doc.get("employee_id")): doc for doc in docs}
         rows: List[Dict[str, Any]] = []
-        lines = ["跨时区汇报情况如下："]
+        lines = [hr_message("cross_timezone_header", language)]
         for doc in docs:
             manager = by_id.get(str(doc.get("manager_id") or ""))
             if manager and manager.get("timezone") != doc.get("timezone"):
                 rows.append(doc)
-                lines.append(f"- {doc.get('name')}（{doc.get('timezone')}） -> {manager.get('name')}（{manager.get('timezone')}）")
+                lines.append(
+                    hr_message("cross_timezone_line", language).format(
+                        name=doc.get("name"), from_tz=doc.get("timezone"), manager_name=manager.get("name"), manager_tz=manager.get("timezone")
+                    )
+                )
         if not rows:
-            lines.append("未发现跨时区汇报。")
+            lines.append(hr_message("cross_timezone_none", language))
         return lines, rows, {"relationship": "cross_timezone_reporting"}
 
     matched_people = _find_people_by_query(text)
@@ -1506,7 +1551,7 @@ def _execute_es_relationship(config: Dict[str, Any], text: str) -> Tuple[List[st
         manager_response = _es_search(config, employee_index, {"size": 1, "query": {"term": {"employee_id": manager_id}}})
         manager_docs = _es_hits_to_docs(manager_response)
         label = manager_docs[0].get("name") if manager_docs else manager_id
-        lines = [f"{label}（{manager_id}）共有 {_es_total(reports_response)} 名在职直接下属。"]
+        lines = [hr_message("manager_reports_line", language).format(label=label, manager_id=manager_id, count=_es_total(reports_response))]
         lines.extend(_format_any_people(reports))
         return lines, reports, {"manager_id": manager_id}
 
@@ -1516,12 +1561,13 @@ def _execute_es_relationship(config: Dict[str, Any], text: str) -> Tuple[List[st
         {"size": 20, "query": {"bool": {"should": [{"term": {"manager_id": ""}}], "minimum_should_match": 1}}},
     )
     docs = _es_hits_to_docs(response)
-    lines = [f"没有指定经理的员工共有 {_es_total(response)} 名："]
+    lines = [hr_message("no_manager_header", language).format(count=_es_total(response))]
     lines.extend(_format_any_people(docs))
     return lines, docs, {"relationship": "missing_manager"}
 
 
 def _execute_es_quality_check(config: Dict[str, Any], query_spec: Dict[str, Any]) -> Tuple[List[str], List[Dict[str, Any]], Dict[str, Any]]:
+    language = current_hr_language()
     employee_index = str(config.get("employee_index") or "")
     check = str(query_spec.get("check") or "all_quality_checks")
     response = _es_search(config, employee_index, {"size": 1000, "query": {"match_all": {}}})
@@ -1532,31 +1578,31 @@ def _execute_es_quality_check(config: Dict[str, Any], query_spec: Dict[str, Any]
     if check in {"invalid_manager_id", "all_quality_checks"}:
         invalid = [doc for doc in docs if doc.get("manager_id") and str(doc.get("manager_id")) not in by_id]
         rows.extend(invalid)
-        lines.append(f"经理 ID 不存在的记录：{len(invalid)} 条。")
-        lines.extend(_format_any_people(invalid, empty_text="- 无"))
+        lines.append(hr_message("invalid_manager_header", language).format(count=len(invalid)))
+        lines.extend(_format_any_people(invalid, empty_text=hr_attribute_text("none_bullet", language)))
     if check in {"invalid_email", "all_quality_checks"}:
         invalid_email = [doc for doc in docs if not _EMAIL_RE.match(str(doc.get("email") or ""))]
         rows.extend(invalid_email)
-        lines.append(f"邮箱格式异常的记录：{len(invalid_email)} 条。")
-        lines.extend(_format_any_people(invalid_email, empty_text="- 无"))
+        lines.append(hr_message("invalid_email_header", language).format(count=len(invalid_email)))
+        lines.extend(_format_any_people(invalid_email, empty_text=hr_attribute_text("none_bullet", language)))
     if check in {"fte_hours_conflict", "all_quality_checks"}:
         conflicts = [
             doc for doc in docs
             if float(doc.get("fte") or 0) == 0.5 and int(doc.get("standard_hours") or 0) == 40
         ]
         rows.extend(conflicts)
-        lines.append(f"FTE 为 0.5 但标准工时为 40 的记录：{len(conflicts)} 条。")
-        lines.extend(_format_any_people(conflicts, empty_text="- 无"))
+        lines.append(hr_message("fte_hours_conflict_header", language).format(count=len(conflicts)))
+        lines.extend(_format_any_people(conflicts, empty_text=hr_attribute_text("none_bullet", language)))
     if check in {"missing_critical_fields", "all_quality_checks"}:
         missing = [
             doc for doc in docs
             if not doc.get("department_code") or not doc.get("department_name") or not doc.get("grade")
         ]
         rows.extend(missing)
-        lines.append(f"缺失关键字段（部门、职级）的记录：{len(missing)} 条。")
-        lines.extend(_format_any_people(missing, empty_text="- 无"))
+        lines.append(hr_message("missing_fields_header", language).format(count=len(missing)))
+        lines.extend(_format_any_people(missing, empty_text=hr_attribute_text("none_bullet", language)))
     if check in {"duplicate_employee_id", "all_quality_checks"}:
-        lines.append("重复员工 ID：主员工索引用 `_id=employee_id` 会覆盖重复；请在 raw JSONL 或原始数据层检测。")
+        lines.append(hr_message("duplicate_id_es_note", language))
     deduped = list({str(doc.get("employee_id")): doc for doc in rows}.values())
     return lines, deduped, {"checked_docs": len(docs)}
 
@@ -1578,9 +1624,10 @@ def _execute_es_document_fetch(
     employee_response = _es_search(config, employee_index, {"size": 10, "query": employee_query})
     employees = _es_hits_to_docs(employee_response)
     employee_ids = [str(doc.get("employee_id")) for doc in employees]
-    lines = [f"找到 {len(employees)} 份简历资料："]
+    language = current_hr_language()
+    lines = [hr_message("resume_material_found_header", language).format(count=len(employees))]
     if not employee_ids:
-        lines.append("- 未识别到明确人员；可尝试输入姓名、员工 ID，或先筛选人员列表。")
+        lines.append(f"- {hr_message('no_identified_person', language)}")
         return lines, [], {"employee_query": employee_query}
 
     asset_response = _es_search(config, asset_index, {"size": 20, "query": {"terms": {"employee_id": employee_ids}}})
@@ -1597,9 +1644,13 @@ def _execute_es_document_fetch(
         employee_id = str(employee.get("employee_id"))
         asset = assets_by_employee.get(employee_id, {})
         chunk = chunks_by_employee.get(employee_id, {})
-        summary = chunk.get("text") or employee.get("resume_summary") or "无简历摘要"
-        storage_uri = asset.get("storage_uri") or "无模拟链接"
-        lines.append(f"- {employee.get('name')}（{employee_id}）：{summary}；资产：{storage_uri}")
+        summary = chunk.get("text") or employee.get("resume_summary") or hr_message("no_resume_summary", language)
+        storage_uri = asset.get("storage_uri") or hr_message("no_mock_link", language)
+        lines.append(
+            hr_message("resume_line", language).format(
+                name=employee.get("name"), employee_id=employee_id, summary=summary, storage_uri=storage_uri
+            )
+        )
     return lines, employees, {"asset_hits": len(assets), "chunk_hits": len(chunks)}
 
 
@@ -1634,7 +1685,7 @@ def execute_hr_query_spec(query_spec: Dict[str, Any], *, query: str = "") -> Dic
         return {
             "intent": "clarify",
             "backend": "es",
-            "lines": [str(query_spec.get("clarifying_question") or "请补充查询条件。")],
+            "lines": [str(query_spec.get("clarifying_question") or hr_message("clarify_query", current_hr_language()))],
             "rows": [],
             "summary": {"row_count": 0},
             "debug": {},
@@ -1685,11 +1736,11 @@ def execute_guarded_hr_es_dsl(
 def _format_dsl_result_lines(search_body: Dict[str, Any], response: Dict[str, Any], rows: List[Dict[str, Any]], total: int, *, query: str = "") -> List[str]:
     aggregations = response.get("aggregations") if isinstance(response, dict) else None
     if isinstance(aggregations, dict) and aggregations:
-        lines = [f"匹配员工共 {total} 人，聚合结果如下："]
+        lines = [hr_message("aggregation_header_with_total", current_hr_language()).format(total=total)]
         lines.extend(_format_aggregation_lines(aggregations))
         return lines
     if int(search_body.get("size") or 0) == 0:
-        return [f"匹配员工共 {total} 人。"]
+        return [hr_message("matched_total_line", current_hr_language()).format(count=total)]
     attribute_fields = _requested_attribute_fields(query)
     if rows and attribute_fields and not _looks_like_list_request(query):
         lines = []
@@ -1710,9 +1761,9 @@ def _format_dsl_result_lines(search_body: Dict[str, Any], response: Dict[str, An
             lines.extend(_format_employee_detail(row))
         return lines
     if rows and len(rows) < total:
-        lines = [f"匹配员工共 {total} 人，返回前 {len(rows)} 人："]
+        lines = [hr_message("matched_returned_line", current_hr_language()).format(total=total, n=len(rows))]
     else:
-        lines = [f"找到 {total} 名匹配人员："]
+        lines = [hr_attribute_text("detail_found_header", current_hr_language()).format(total=total)]
     if "tenure_years" in attribute_fields:
         for row in rows:
             tenure = _attribute_value(row, "tenure_years")
@@ -1775,16 +1826,19 @@ def _format_employee_detail(row: Dict[str, Any]) -> List[str]:
 
 
 def _format_aggregation_lines(aggregations: Dict[str, Any]) -> List[str]:
+    language = current_hr_language()
     lines: List[str] = []
     for name, value in aggregations.items():
         if isinstance(value, dict) and isinstance(value.get("buckets"), list):
-            lines.append(f"- {name}：")
+            lines.append(hr_message("aggregation_field_header", language).format(name=name))
             for bucket in value.get("buckets") or []:
-                lines.append(f"  - {bucket.get('key')}：{bucket.get('doc_count')} 人")
+                lines.append(
+                    hr_message("aggregation_bucket_line", language).format(key=bucket.get("key"), count=bucket.get("doc_count"))
+                )
         elif isinstance(value, dict) and "value" in value:
-            lines.append(f"- {name}：{value.get('value')}")
+            lines.append(hr_message("aggregation_value_line", language).format(name=name, value=value.get("value")))
         else:
-            lines.append(f"- {name}：{value}")
+            lines.append(hr_message("aggregation_value_line", language).format(name=name, value=value))
     return lines
 
 
@@ -1802,7 +1856,7 @@ def _prepare_query_spec_for_execution(query_spec: Dict[str, Any]) -> Dict[str, A
 def _execute_attribute_lookup(query_spec: Dict[str, Any]) -> tuple[List[str], List[Dict[str, Any]], Dict[str, Any]]:
     fields = [str(field) for field in query_spec.get("select_fields") or [] if str(field)]
     if not fields:
-        return ["请说明要查询员工的哪个字段，例如办公地点、工号、邮箱或部门。"], [], {}
+        return [hr_message("please_specify_field", current_hr_language())], [], {}
 
     rows = _fetch_attribute_subjects_from_es(query_spec)
 
@@ -1904,14 +1958,19 @@ def _execute_es_document_fetch(query_spec: Dict[str, Any]) -> tuple[List[str], L
     assets_by_employee = {str(asset.get("employee_id")): asset for asset in assets}
     chunks_by_employee = {str(chunk.get("employee_id")): chunk for chunk in chunks}
 
-    lines = [f"找到 {len(employees)} 份简历资料："]
+    language = current_hr_language()
+    lines = [hr_message("resume_material_found_header", language).format(count=len(employees))]
     for employee in employees:
         employee_id = str(employee.get("employee_id") or "")
         asset = assets_by_employee.get(employee_id, {})
         chunk = chunks_by_employee.get(employee_id, {})
-        summary = chunk.get("text") or employee.get("resume_summary") or "无简历摘要"
-        storage_uri = asset.get("storage_uri") or "无模拟链接"
-        lines.append(f"- {employee.get('name')}（{employee_id}）：{summary}；资产：{storage_uri}")
+        summary = chunk.get("text") or employee.get("resume_summary") or hr_message("no_resume_summary", language)
+        storage_uri = asset.get("storage_uri") or hr_message("no_mock_link", language)
+        lines.append(
+            hr_message("resume_line", language).format(
+                name=employee.get("name"), employee_id=employee_id, summary=summary, storage_uri=storage_uri
+            )
+        )
     return lines, employees, {"employee_hits": len(employees), "asset_hits": len(assets), "chunk_hits": len(chunks)}
 
 
