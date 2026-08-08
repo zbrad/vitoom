@@ -16,7 +16,24 @@ from __future__ import annotations
 from contextvars import ContextVar
 from typing import Dict, Optional
 
-DEFAULT_LANGUAGE = "English"
+
+# Single source of truth: the project's default-to-English policy lives in
+# backend/services/chat/language.py (consumed by master_runtime.py to resolve
+# session locale). Read it here instead of redefining a separate constant, so
+# this module can't silently drift out of sync with the policy it implements.
+#
+# The import is deferred to first use rather than done at module level:
+# backend.services.chat's __init__ eagerly imports master_runtime.py, which
+# imports back from backend.services.agent.* (CrewFactory, ToolResolver, ...)
+# - the very package this module lives in. Importing backend.services.chat at
+# module load time, before backend.services.agent has finished initializing,
+# would risk a circular import; deferring to first real call (after both
+# packages are fully loaded) avoids that.
+def _default_language() -> str:
+    from backend.services.chat.language import DEFAULT_RESPONSE_LANGUAGE
+
+    return DEFAULT_RESPONSE_LANGUAGE
+
 
 KB_HEADERS: Dict[str, Dict[str, str]] = {
     "English": {"answer": "### Answer", "evidence": "### Evidence", "not_covered": "### Not Covered"},
@@ -245,20 +262,23 @@ HR_ATTRIBUTE_TEXT: Dict[str, Dict[str, str]] = {
 
 
 def hr_field_label(field: str, language: Optional[str]) -> str:
-    table = HR_FIELD_LABELS.get(language or "", HR_FIELD_LABELS[DEFAULT_LANGUAGE])
+    table = HR_FIELD_LABELS.get(language or "", HR_FIELD_LABELS[_default_language()])
     return table.get(field, field)
 
 
 def hr_attribute_label(field: str, language: Optional[str]) -> str:
-    overrides = HR_ATTRIBUTE_LABEL_OVERRIDES.get(language or "", HR_ATTRIBUTE_LABEL_OVERRIDES[DEFAULT_LANGUAGE])
+    overrides = HR_ATTRIBUTE_LABEL_OVERRIDES.get(
+        language or "", HR_ATTRIBUTE_LABEL_OVERRIDES[_default_language()]
+    )
     if field in overrides:
         return overrides[field]
     return hr_field_label(field, language)
 
 
 def hr_attribute_text(key: str, language: Optional[str]) -> str:
-    table = HR_ATTRIBUTE_TEXT.get(language or "", HR_ATTRIBUTE_TEXT[DEFAULT_LANGUAGE])
-    return table.get(key, HR_ATTRIBUTE_TEXT[DEFAULT_LANGUAGE][key])
+    default = _default_language()
+    table = HR_ATTRIBUTE_TEXT.get(language or "", HR_ATTRIBUTE_TEXT[default])
+    return table.get(key, HR_ATTRIBUTE_TEXT[default][key])
 
 
 # Whole-line/whole-sentence templates for the HR sample-backend and ES-mirror
@@ -492,32 +512,32 @@ HR_MESSAGES: Dict[str, Dict[str, str]] = {
 
 
 def hr_message(key: str, language: Optional[str]) -> str:
-    table = HR_MESSAGES.get(language or "", HR_MESSAGES[DEFAULT_LANGUAGE])
-    return table.get(key, HR_MESSAGES[DEFAULT_LANGUAGE][key])
+    table = HR_MESSAGES.get(language or "", HR_MESSAGES[_default_language()])
+    return table.get(key, HR_MESSAGES[_default_language()][key])
 
 
 def kb_headers(language: Optional[str]) -> Dict[str, str]:
-    return KB_HEADERS.get(language or "", KB_HEADERS[DEFAULT_LANGUAGE])
+    return KB_HEADERS.get(language or "", KB_HEADERS[_default_language()])
 
 
 def kb_string(key: str, language: Optional[str]) -> str:
-    table = KB_STRINGS.get(language or "", KB_STRINGS[DEFAULT_LANGUAGE])
-    return table.get(key, KB_STRINGS[DEFAULT_LANGUAGE][key])
+    table = KB_STRINGS.get(language or "", KB_STRINGS[_default_language()])
+    return table.get(key, KB_STRINGS[_default_language()][key])
 
 
 def media_string(key: str, language: Optional[str]) -> str:
-    table = MEDIA_STRINGS.get(language or "", MEDIA_STRINGS[DEFAULT_LANGUAGE])
-    return table.get(key, MEDIA_STRINGS[DEFAULT_LANGUAGE][key])
+    table = MEDIA_STRINGS.get(language or "", MEDIA_STRINGS[_default_language()])
+    return table.get(key, MEDIA_STRINGS[_default_language()][key])
 
 
 def kb_citation_text(key: str, language: Optional[str]) -> str:
-    table = KB_CITATION_TEXT.get(language or "", KB_CITATION_TEXT[DEFAULT_LANGUAGE])
-    return table.get(key, KB_CITATION_TEXT[DEFAULT_LANGUAGE][key])
+    table = KB_CITATION_TEXT.get(language or "", KB_CITATION_TEXT[_default_language()])
+    return table.get(key, KB_CITATION_TEXT[_default_language()][key])
 
 
 def hr_string(key: str, language: Optional[str]) -> str:
-    table = HR_STRINGS.get(language or "", HR_STRINGS[DEFAULT_LANGUAGE])
-    return table.get(key, HR_STRINGS[DEFAULT_LANGUAGE][key])
+    table = HR_STRINGS.get(language or "", HR_STRINGS[_default_language()])
+    return table.get(key, HR_STRINGS[_default_language()][key])
 
 
 # HR executor's deterministic formatting (backend/services/agent/tools/builtin/
@@ -538,4 +558,4 @@ def reset_hr_language(token) -> None:
 
 
 def current_hr_language() -> str:
-    return _hr_language_ctx.get() or DEFAULT_LANGUAGE
+    return _hr_language_ctx.get() or _default_language()
