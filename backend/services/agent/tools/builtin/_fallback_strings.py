@@ -119,6 +119,66 @@ KB_CITATION_TEXT: Dict[str, Dict[str, str]] = {
     },
 }
 
+# knowledge_base_archive.py's tool-result status/error strings and the
+# default title used when archiving a conversation without an explicit one.
+# This tool already threads a session-derived `bound_language` through to
+# archive_url()/archive_conversation() for classification (see
+# knowledge_base_core/classifier.py); these are the strings it builds itself
+# rather than passing through, so they need the same language resolved here.
+#
+# default_conversation_title is not just display text: archive_conversation()
+# passes it straight into save_markdown_to_archive(title=...) -> safe_filename()
+# as the .md filename stem, and into the manifest/ES document row's title
+# field - so it's persisted, not just shown once. Kept hyphenated rather than
+# space-separated so safe_filename() (which drops non-alnum/._- characters)
+# doesn't squash it into one run-on word; the zh/ja values have no spaces to
+# begin with, so they're unaffected either way.
+KB_ARCHIVE_STRINGS: Dict[str, Dict[str, str]] = {
+    "English": {
+        "missing_user_context": "Missing user context; cannot archive to the knowledge base.",
+        "url_required": "mode=url requires 'url'",
+        "content_required": "mode=conversation requires 'content'",
+        "unsupported_mode": "mode must be 'url' or 'conversation'",
+        "default_conversation_title": "Conversation-Archive",
+        "archived_success": "Archived to the knowledge base and refreshed the index; it's queryable now.",
+    },
+    "Chinese": {
+        "missing_user_context": "缺少用户上下文，无法执行知识库归档。",
+        "url_required": "mode=url 需要提供 url",
+        "content_required": "mode=conversation 需要提供 content",
+        "unsupported_mode": "mode 只支持 url 或 conversation",
+        "default_conversation_title": "对话归档",
+        "archived_success": "已归档到知识库并刷新索引，可立即查询。",
+    },
+    "Japanese": {
+        "missing_user_context": "ユーザーコンテキストが不足しているため、知識ベースへの保存を実行できません。",
+        "url_required": "mode=url には 'url' の指定が必要です",
+        "content_required": "mode=conversation には 'content' の指定が必要です",
+        "unsupported_mode": "mode は 'url' または 'conversation' のみ指定できます",
+        "default_conversation_title": "会話アーカイブ",
+        "archived_success": "知識ベースへの保存とインデックスの更新が完了しました。すぐに検索できます。",
+    },
+}
+
+# knowledge_base_core/classifier.py's resolve_classifier_user_id() error,
+# raised when no explicit --classifier-user-id was given and no active/admin
+# user could be found to run classification as. Rare (deployment
+# misconfiguration), but reachable from both the session-aware archive path
+# (which has a language) and the batch/CLI path (which resolves to the
+# deployment default via _default_language()), same as every other string in
+# classifier.py.
+KB_CLASSIFIER_STRINGS: Dict[str, Dict[str, str]] = {
+    "English": {
+        "user_id_required": "Knowledge base LLM classification requires a valid user ID. Pass --classifier-user-id <user_id>.",
+    },
+    "Chinese": {
+        "user_id_required": "知识库 LLM 分类需要有效用户 ID。请传入 --classifier-user-id <用户ID>。",
+    },
+    "Japanese": {
+        "user_id_required": "知識ベースの LLM 分類には有効なユーザー ID が必要です。--classifier-user-id <ユーザーID> を指定してください。",
+    },
+}
+
 HR_STRINGS: Dict[str, Dict[str, str]] = {
     "English": {
         "no_matching_people": "No matching employees found.",
@@ -533,6 +593,16 @@ def media_string(key: str, language: Optional[str]) -> str:
 def kb_citation_text(key: str, language: Optional[str]) -> str:
     table = KB_CITATION_TEXT.get(language or "", KB_CITATION_TEXT[_default_language()])
     return table.get(key, KB_CITATION_TEXT[_default_language()][key])
+
+
+def kb_archive_string(key: str, language: Optional[str]) -> str:
+    table = KB_ARCHIVE_STRINGS.get(language or "", KB_ARCHIVE_STRINGS[_default_language()])
+    return table.get(key, KB_ARCHIVE_STRINGS[_default_language()][key])
+
+
+def kb_classifier_string(key: str, language: Optional[str]) -> str:
+    table = KB_CLASSIFIER_STRINGS.get(language or "", KB_CLASSIFIER_STRINGS[_default_language()])
+    return table.get(key, KB_CLASSIFIER_STRINGS[_default_language()][key])
 
 
 def hr_string(key: str, language: Optional[str]) -> str:

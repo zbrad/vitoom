@@ -7,6 +7,7 @@ import time
 from typing import Any, Callable, Dict, List, Optional
 
 from backend.services.agent.settings import get_agent_internal_user_id
+from backend.services.agent.tools.builtin._fallback_strings import kb_classifier_string
 from backend.services.agent.tools.builtin.business_query_core.planner_base import parse_llm_json_object, run_agent_planner_completion
 
 logger = logging.getLogger(__name__)
@@ -54,7 +55,7 @@ def preview_text_for_classification(row: Dict[str, Any], *, max_chars: int = 300
         return ""
 
 
-def resolve_classifier_user_id(user_id: str = "") -> str:
+def resolve_classifier_user_id(user_id: str = "", *, language: Optional[str] = None) -> str:
     configured = str(user_id or "").strip()
     if configured and configured != get_agent_internal_user_id():
         return configured
@@ -69,7 +70,7 @@ def resolve_classifier_user_id(user_id: str = "") -> str:
     selected = (admin_users or active_users or users or [{}])[0]
     resolved = str(selected.get("id") or "").strip()
     if not resolved:
-        raise RuntimeError("知识库 LLM 分类需要有效用户 ID。请传入 --classifier-user-id <用户ID>。")
+        raise RuntimeError(kb_classifier_string("user_id_required", language or _default_language()))
     return resolved
 
 
@@ -107,7 +108,7 @@ def classify_source_row(
     language: Optional[str] = None,
 ) -> Dict[str, Any]:
     preview = preview_text if preview_text else preview_text_for_classification(row)
-    effective_user_id = resolve_classifier_user_id(user_id)
+    effective_user_id = resolve_classifier_user_id(user_id, language=language)
     messages = [
         {
             "role": "system",

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, Optional
 
+from backend.services.agent.tools.builtin._fallback_strings import kb_archive_string
 from backend.services.agent.tools.builtin.knowledge_base_core.archive import archive_conversation, archive_url
 from backend.services.agent.tools.registry import register_tool
 
@@ -77,12 +78,13 @@ def build_knowledge_base_archive_tool(*, context: Optional[Dict[str, Any]] = Non
         ) -> str:
             user_id = bound_user_id
             if not user_id:
-                return "```json\n" + _json_dumps({"status": "failed", "error": "缺少用户上下文，无法执行知识库归档。"}) + "\n```"
+                error = kb_archive_string("missing_user_context", bound_language)
+                return "```json\n" + _json_dumps({"status": "failed", "error": error}) + "\n```"
             try:
                 normalized_mode = str(mode or "url").strip().lower()
                 if normalized_mode == "url":
                     if not str(url or "").strip():
-                        raise ValueError("mode=url 需要提供 url")
+                        raise ValueError(kb_archive_string("url_required", bound_language))
                     result = archive_url(
                         str(url).strip(),
                         user_id=user_id,
@@ -93,18 +95,18 @@ def build_knowledge_base_archive_tool(*, context: Optional[Dict[str, Any]] = Non
                     )
                 elif normalized_mode in {"conversation", "chat", "markdown"}:
                     if not str(content or "").strip():
-                        raise ValueError("mode=conversation 需要提供 content")
+                        raise ValueError(kb_archive_string("content_required", bound_language))
                     result = archive_conversation(
                         str(content),
                         user_id=user_id,
-                        title=title or "对话归档",
+                        title=title or kb_archive_string("default_conversation_title", bound_language),
                         summarize=summarize,
                         classify=classify,
                         knowledge_base_id=knowledge_base_id or "default",
                         language=bound_language,
                     )
                 else:
-                    raise ValueError("mode 只支持 url 或 conversation")
+                    raise ValueError(kb_archive_string("unsupported_mode", bound_language))
                 document = result.get("document") or {}
                 payload = {
                     "status": "success",
@@ -115,7 +117,7 @@ def build_knowledge_base_archive_tool(*, context: Optional[Dict[str, Any]] = Non
                     "subtopic": document.get("subtopic"),
                     "canonical_path": document.get("canonical_path"),
                     "ingest": result.get("ingest"),
-                    "message": "已归档到知识库并刷新索引，可立即查询。",
+                    "message": kb_archive_string("archived_success", bound_language),
                 }
                 return "```json\n" + _json_dumps(payload) + "\n```"
             except Exception as exc:
