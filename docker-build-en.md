@@ -209,7 +209,7 @@ VITOOM_TORCH_BASE_IMAGE=vitoom-torch-runtime:2.11-py3.11-cu130 \
 TORCH_INDEX_URL=https://download.pytorch.org/whl/cu130 \
 VLLM_VERSION=0.21.0 \
 CUDA_KEYRING_VERSION=1.1-1 \
-TEXT_CUDA_TOOLKIT_PACKAGE_SUFFIX=13-1 \
+TEXT_CUDA_TOOLKIT_PACKAGE_SUFFIX=13-3 \
 VITOOM_TEXT_IMAGE=vitoom-inference-text:experimental-cu130-torch2.11-x86_64 \
 docker compose -f docker-compose.inference.yml build text
 ```
@@ -222,7 +222,7 @@ VITOOM_TORCH_BASE_IMAGE=vitoom-torch-runtime:2.11-py3.11-cu130 \
 TORCH_INDEX_URL=https://download.pytorch.org/whl/cu130 \
 VLLM_VERSION=0.21.0 \
 CUDA_KEYRING_VERSION=1.1-1 \
-TEXT_CUDA_TOOLKIT_PACKAGE_SUFFIX=13-2 \
+TEXT_CUDA_TOOLKIT_PACKAGE_SUFFIX=13-3 \
 VITOOM_TEXT_IMAGE=vitoom-inference-text:experimental-cu130-torch2.11-aarch64-nvidia-spark \
 docker compose -f docker-compose.inference.yml build text
 ```

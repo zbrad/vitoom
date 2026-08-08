@@ -36,8 +36,8 @@ COPY docker/inference/services/text ./docker/inference/services/text
 RUN --mount=type=cache,id=vitoom-pip-cache,target=/root/.cache/pip,sharing=locked \
     set -eux; \
     case "${TARGETARCH:-}" in \
-        amd64) cuda_repo_arch="x86_64"; cuda_default_suffix="13-1" ;; \
-        arm64) cuda_repo_arch="sbsa"; cuda_default_suffix="13-2" ;; \
+        amd64) cuda_repo_arch="x86_64"; cuda_default_suffix="13-3" ;; \
+        arm64) cuda_repo_arch="sbsa"; cuda_default_suffix="13-3" ;; \
         *) echo "Unsupported Docker target architecture for CUDA Toolkit: ${TARGETARCH:-<empty>}" >&2; exit 1 ;; \
     esac; \
     cuda_pkg_suffix="${CUDA_TOOLKIT_PACKAGE_SUFFIX:-$cuda_default_suffix}"; \
