@@ -1705,7 +1705,7 @@ def _format_dsl_result_lines(search_body: Dict[str, Any], response: Dict[str, An
                 )
         return lines
     if rows and _looks_like_detail_request(query):
-        lines = [f"找到 {total} 名匹配人员："]
+        lines = [hr_attribute_text("detail_found_header", current_hr_language()).format(total=total)]
         for row in rows:
             lines.extend(_format_employee_detail(row))
         return lines
@@ -1751,18 +1751,26 @@ def _requested_attribute_fields(query: str) -> List[str]:
 
 
 def _format_employee_detail(row: Dict[str, Any]) -> List[str]:
-    status = "在职" if row.get("employment_status") == "active" else "非在职"
-    manager_id = str(row.get("manager_id") or "").strip() or "未填"
+    language = current_hr_language()
+    unfilled = hr_attribute_text("unfilled", language)
+    status = hr_attribute_text("active", language) if row.get("employment_status") == "active" else hr_attribute_text(
+        "inactive", language
+    )
+    manager_id = str(row.get("manager_id") or "").strip() or unfilled
+    detail_line = hr_attribute_text("detail_line", language)
     return [
-        f"- {row.get('name')}（{row.get('employee_id')}）：",
-        f"  - 状态：{status}",
-        f"  - 部门：{row.get('department_name') or row.get('department_code') or '未填'}",
-        f"  - 职位：{row.get('job_title') or '未填'}",
-        f"  - 职级：{row.get('grade') or '未填'}",
-        f"  - 办公城市：{row.get('office_city') or '未填'}",
-        f"  - 入职日期：{row.get('hire_date') or '未填'}",
-        f"  - 经理 ID：{manager_id}",
-        f"  - 邮箱：{row.get('email') or '未填'}",
+        hr_attribute_text("detail_header", language).format(name=row.get("name"), employee_id=row.get("employee_id")),
+        detail_line.format(label=hr_field_label("employment_status", language), value=status),
+        detail_line.format(
+            label=hr_field_label("department_name", language),
+            value=row.get("department_name") or row.get("department_code") or unfilled,
+        ),
+        detail_line.format(label=hr_field_label("job_title", language), value=row.get("job_title") or unfilled),
+        detail_line.format(label=hr_field_label("grade", language), value=row.get("grade") or unfilled),
+        detail_line.format(label=hr_attribute_label("office_city", language), value=row.get("office_city") or unfilled),
+        detail_line.format(label=hr_field_label("hire_date", language), value=row.get("hire_date") or unfilled),
+        detail_line.format(label=hr_attribute_text("detail_manager_id_label", language), value=manager_id),
+        detail_line.format(label=hr_field_label("email", language), value=row.get("email") or unfilled),
     ]
 
 

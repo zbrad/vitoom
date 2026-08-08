@@ -92,6 +92,7 @@ HR_FIELD_LABELS: Dict[str, Dict[str, str]] = {
         "tenure_years": "Tenure",
         "employment_status": "Status",
         "attrition_risk": "Attrition Risk",
+        "grade": "Grade",
     },
     "Chinese": {
         "employee_id": "工号",
@@ -106,6 +107,7 @@ HR_FIELD_LABELS: Dict[str, Dict[str, str]] = {
         "tenure_years": "入职年限",
         "employment_status": "状态",
         "attrition_risk": "离职风险",
+        "grade": "职级",
     },
     "Japanese": {
         "employee_id": "社員ID",
@@ -120,6 +122,7 @@ HR_FIELD_LABELS: Dict[str, Dict[str, str]] = {
         "tenure_years": "勤続年数",
         "employment_status": "在籍状況",
         "attrition_risk": "離職リスク",
+        "grade": "グレード",
     },
 }
 
@@ -144,6 +147,10 @@ HR_ATTRIBUTE_TEXT: Dict[str, Dict[str, str]] = {
         "attribute_pair_separator": ": ",
         "attribute_pair_joiner": "; ",
         "tenure_note": ", tenure {value}",
+        "detail_header": "- {name} ({employee_id}):",
+        "detail_line": "  - {label}: {value}",
+        "detail_manager_id_label": "Manager ID",
+        "detail_found_header": "Found {total} matching employees:",
     },
     "Chinese": {
         "unfilled": "未填",
@@ -157,6 +164,10 @@ HR_ATTRIBUTE_TEXT: Dict[str, Dict[str, str]] = {
         "attribute_pair_separator": "：",
         "attribute_pair_joiner": "；",
         "tenure_note": "，入职年限{value}",
+        "detail_header": "- {name}（{employee_id}）：",
+        "detail_line": "  - {label}：{value}",
+        "detail_manager_id_label": "经理 ID",
+        "detail_found_header": "找到 {total} 名匹配人员：",
     },
     "Japanese": {
         "unfilled": "未入力",
@@ -170,6 +181,10 @@ HR_ATTRIBUTE_TEXT: Dict[str, Dict[str, str]] = {
         "attribute_pair_separator": "：",
         "attribute_pair_joiner": "；",
         "tenure_note": "、勤続年数{value}",
+        "detail_header": "- {name}（{employee_id}）：",
+        "detail_line": "  - {label}：{value}",
+        "detail_manager_id_label": "マネージャーID",
+        "detail_found_header": "該当する社員が{total}名見つかりました：",
     },
 }
 
