@@ -47,6 +47,155 @@ HR_BUSINESS_QUERY_DESCRIPTION = (
 
 HR_BUSINESS_QUERY_DOCSTRING = "Run a production HR business query via guarded ES DSL or QuerySpec planning."
 
+# Multilingual keyword tables for query route classification.
+# These detect whether a query is about data quality/governance, queryspec-routable business logic,
+# or free-form ES DSL. Keywords are matched against user input, so each table covers a single language.
+DATA_QUALITY_KEYWORDS: Dict[str, tuple] = {
+    "English": (
+        "data quality",
+        "email format",
+        "malformed email",
+        "email exception",
+        "invalid email",
+        "duplicate employee",
+        "duplicate employee id",
+        "duplicate employee number",
+        "same employee id",
+        "manager id not found",
+        "manager id missing",
+        "invalid manager",
+        "no valid manager",
+        "missing key fields",
+        "missing required fields",
+        "field missing",
+    ),
+    "Chinese": (
+        "数据质量",
+        "邮箱格式",
+        "邮箱不规范",
+        "邮箱异常",
+        "邮箱不合法",
+        "重复员工",
+        "员工 ID 重复",
+        "员工ID重复",
+        "员工编号重复",
+        "同一员工 ID",
+        "同一员工ID",
+        "经理 ID 不存在",
+        "经理ID不存在",
+        "上级编号无效",
+        "没有合法经理",
+        "缺失关键字段",
+        "缺少关键字段",
+        "字段缺失",
+    ),
+    "Japanese": (
+        "データ品質",
+        "メール形式",
+        "メール形式異常",
+        "メール例外",
+        "無効なメール",
+        "重複従業員",
+        "従業員ID重複",
+        "従業員番号重複",
+        "同一従業員ID",
+        "マネージャーID不存在",
+        "マネージャーID欠落",
+        "無効なマネージャー",
+        "有効なマネージャーなし",
+        "必須フィールド欠落",
+        "必須フィールド欠落",
+        "フィールド欠落",
+    ),
+}
+
+QUERYSPEC_BUSINESS_KEYWORDS: Dict[str, tuple] = {
+    "English": (
+        "direct report",
+        "direct reports",
+        "reporting",
+        "reporting relationship",
+        "most direct report",
+        "cross timezone",
+        "cross-timezone",
+        "manager and employee",
+        "resume",
+        "résumé",
+        "attachment",
+        "download",
+        "detailed information",
+        "detailed material",
+        "basic information",
+        "personal information",
+        "employee information",
+        "give me the information",
+        "give me the material",
+        "fte 0.5 but standard hours",
+        "fte 0.5 with standard hours",
+    ),
+    "Chinese": (
+        "直接下属",
+        "汇报",
+        "下属最多",
+        "跨时区",
+        "经理和员工",
+        "简历",
+        "履历",
+        "附件",
+        "下载",
+        "详细信息",
+        "详细资料",
+        "基本信息",
+        "个人信息",
+        "员工信息",
+        "资料给我",
+        "FTE 为 0.5 但标准工时",
+    ),
+    "Japanese": (
+        "直属部下",
+        "報告",
+        "報告関係",
+        "最も直属部下が多い",
+        "タイムゾーン",
+        "時間帯",
+        "マネージャーと従業員",
+        "履歴書",
+        "添付ファイル",
+        "ダウンロード",
+        "詳細情報",
+        "詳細資料",
+        "基本情報",
+        "個人情報",
+        "従業員情報",
+        "情報をください",
+        "資料をください",
+        "FTE 0.5だが標準時間",
+    ),
+}
+
+EDUCATION_FIELD_KEYWORDS: Dict[str, tuple] = {
+    "English": (
+        "education",
+        "educational background",
+        "degree",
+        "graduation",
+        "graduation school",
+        "school",
+    ),
+    "Chinese": (
+        "学历",
+        "学位",
+        "毕业院校",
+        "学校",
+    ),
+    "Japanese": (
+        "学歴",
+        "学位",
+        "卒業校",
+        "学校",
+    ),
+}
+
 
 def _coerce_tool_args(raw_input: Any = None, **kwargs: Any) -> Dict[str, Any]:
     if kwargs:
@@ -83,7 +232,7 @@ def run_hr_business_query(
     try:
         configured = _query_config()
         direct_spec = parse_query_spec_input(query_spec)
-        route = _classify_hr_query_route(text, direct_spec)
+        route = _classify_hr_query_route(text, direct_spec, language=language)
         if route == "data_quality":
             return _compose_data_quality_boundary_response(include_debug=include_debug, query=text)
         if direct_spec is not None:
@@ -160,65 +309,27 @@ def run_hr_business_query(
         reset_hr_language(hr_language_token)
 
 
-def _classify_hr_query_route(query: str, query_spec: Any = None) -> str:
+def _classify_hr_query_route(query: str, query_spec: Any = None, language: Optional[str] = None) -> str:
     if isinstance(query_spec, dict) and query_spec.get("intent") == "quality_check":
         return "data_quality"
     text = str(query or "")
-    if _looks_like_data_quality_query(text):
+    if _looks_like_data_quality_query(text, language=language):
         return "data_quality"
-    if _looks_like_queryspec_business_query(text):
+    if _looks_like_queryspec_business_query(text, language=language):
         return "queryspec"
     return "dsl"
 
 
-def _looks_like_data_quality_query(text: str) -> bool:
-    return any(
-        keyword in text
-        for keyword in (
-            "数据质量",
-            "邮箱格式",
-            "邮箱不规范",
-            "邮箱异常",
-            "邮箱不合法",
-            "重复员工",
-            "员工 ID 重复",
-            "员工ID重复",
-            "员工编号重复",
-            "同一员工 ID",
-            "同一员工ID",
-            "经理 ID 不存在",
-            "经理ID不存在",
-            "上级编号无效",
-            "没有合法经理",
-            "缺失关键字段",
-            "缺少关键字段",
-            "字段缺失",
-        )
-    )
+def _looks_like_data_quality_query(text: str, language: Optional[str] = None) -> bool:
+    lang = language or current_hr_language()
+    keywords = DATA_QUALITY_KEYWORDS.get(lang, DATA_QUALITY_KEYWORDS["English"])
+    return any(keyword in text for keyword in keywords)
 
 
-def _looks_like_queryspec_business_query(text: str) -> bool:
-    return any(
-        keyword in text
-        for keyword in (
-            "直接下属",
-            "汇报",
-            "下属最多",
-            "跨时区",
-            "经理和员工",
-            "简历",
-            "履历",
-            "附件",
-            "下载",
-            "详细信息",
-            "详细资料",
-            "基本信息",
-            "个人信息",
-            "员工信息",
-            "资料给我",
-            "FTE 为 0.5 但标准工时",
-        )
-    )
+def _looks_like_queryspec_business_query(text: str, language: Optional[str] = None) -> bool:
+    lang = language or current_hr_language()
+    keywords = QUERYSPEC_BUSINESS_KEYWORDS.get(lang, QUERYSPEC_BUSINESS_KEYWORDS["English"])
+    return any(keyword in text for keyword in keywords)
 
 
 def _compose_data_quality_boundary_response(*, include_debug: bool = False, query: str = "") -> str:
@@ -233,7 +344,8 @@ def _append_unsupported_field_notes(answer: str, query: str) -> str:
     notes = []
     text = str(query or "")
     language = current_hr_language()
-    if any(keyword in text for keyword in ("学历", "学位", "毕业院校", "学校")):
+    education_keywords = EDUCATION_FIELD_KEYWORDS.get(language, EDUCATION_FIELD_KEYWORDS["English"])
+    if any(keyword in text for keyword in education_keywords):
         notes.append(hr_message("no_education_field_note", language))
     if not notes:
         return answer
