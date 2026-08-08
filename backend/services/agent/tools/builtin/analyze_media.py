@@ -14,6 +14,7 @@ import logging
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
+from backend.services.agent.tools.builtin._fallback_strings import media_string
 from backend.services.agent.tools.registry import register_tool
 from backend.services.llm.multimodal import (
     MultimodalCompletionError,
@@ -59,9 +60,9 @@ def _guess_media_type(url: str) -> str:
     return "image"
 
 
-def _build_messages(*, urls: List[str], question: str) -> List[Dict[str, Any]]:
+def _build_messages(*, urls: List[str], question: str, language: Optional[str] = None) -> List[Dict[str, Any]]:
     content: List[Dict[str, Any]] = []
-    text = question.strip() or "请用中文详细描述这些媒体内容的要点。"
+    text = question.strip() or media_string("default_question", language)
     content.append({"type": "text", "text": text})
     for url in urls:
         media_type = _guess_media_type(url)
@@ -104,6 +105,7 @@ def _do_analyze_media(
     url: Any = "",
     urls_json: Any = "",
     question: str = "",
+    language: Optional[str] = None,
 ) -> str:
     collected: List[str] = []
     collected.extend(_coerce_url_input(url))
@@ -133,7 +135,7 @@ def _do_analyze_media(
             "ensure the tool is invoked from an agent run with a user context."
         )
 
-    messages = _build_messages(urls=final_urls, question=question or "")
+    messages = _build_messages(urls=final_urls, question=question or "", language=language)
     logger.info(
         "analyze_media invoking multimodal completion urls=%d user=%s question_chars=%d model=%s",
         len(final_urls),
@@ -166,6 +168,7 @@ def _do_analyze_media(
 def build_analyze_media_tool(*, context: Optional[Dict[str, Any]] = None):
     ctx = dict(context or {})
     bound_user_id = str(ctx.get("user_id") or "").strip()
+    bound_language = str(ctx.get("language") or "").strip() or None
     runtime_config = dict(ctx.get("runtime_config") or {})
     bound_model_name = str(
         runtime_config.get("load_name") or ctx.get("load_name") or ""
@@ -220,6 +223,7 @@ def build_analyze_media_tool(*, context: Optional[Dict[str, Any]] = None):
                 url=url,
                 urls_json=urls,
                 question=question or "",
+                language=bound_language,
             )
 
     return AnalyzeMediaTool()

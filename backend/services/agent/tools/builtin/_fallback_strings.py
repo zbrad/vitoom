@@ -59,6 +59,25 @@ KB_STRINGS: Dict[str, Dict[str, str]] = {
     },
 }
 
+# analyze_media.py's fallback instruction to the multimodal LLM when the user
+# attaches media without asking a specific question. Unlike most fallback
+# strings here this text becomes a directive to the model, not just a
+# deterministic reply to the user - so it must itself request output in the
+# resolved session language, or the model has no other language signal to
+# follow (there was previously no such signal at all: this fallback always
+# requested output in Chinese regardless of session locale).
+MEDIA_STRINGS: Dict[str, Dict[str, str]] = {
+    "English": {
+        "default_question": "Describe the key points of this media content in detail, in English.",
+    },
+    "Chinese": {
+        "default_question": "请用中文详细描述这些媒体内容的要点。",
+    },
+    "Japanese": {
+        "default_question": "このメディアコンテンツの要点を日本語で詳しく説明してください。",
+    },
+}
+
 # Citation formatting for knowledge_base_core/answer.py's _source_label(),
 # used both in the LLM-facing retrieval context and in the deterministic
 # evidence_only_answer() fallback shown directly to the user.
@@ -484,6 +503,11 @@ def kb_headers(language: Optional[str]) -> Dict[str, str]:
 def kb_string(key: str, language: Optional[str]) -> str:
     table = KB_STRINGS.get(language or "", KB_STRINGS[DEFAULT_LANGUAGE])
     return table.get(key, KB_STRINGS[DEFAULT_LANGUAGE][key])
+
+
+def media_string(key: str, language: Optional[str]) -> str:
+    table = MEDIA_STRINGS.get(language or "", MEDIA_STRINGS[DEFAULT_LANGUAGE])
+    return table.get(key, MEDIA_STRINGS[DEFAULT_LANGUAGE][key])
 
 
 def kb_citation_text(key: str, language: Optional[str]) -> str:
