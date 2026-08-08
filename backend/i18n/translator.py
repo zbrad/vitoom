@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
-from .locale import DEFAULT_LOCALE
+from .locale import detect_cli_locale
 from .messages.en_US import MESSAGES as EN_MESSAGES
 from .messages.ja_JP import MESSAGES as JA_MESSAGES
 from .messages.zh_CN import MESSAGES as ZH_MESSAGES
@@ -15,16 +15,30 @@ _CATALOGS: Dict[str, Dict[str, str]] = {
     "ja-JP": JA_MESSAGES,
 }
 
+# Deployment-level fallback locale, resolved once at import time from the
+# same VITOOM_LOCALE/LC_ALL/LANG signal used elsewhere in this series (see
+# chat/language.py's DEFAULT_RESPONSE_LANGUAGE). Was hardcoded to
+# backend.i18n.locale.DEFAULT_LOCALE ("zh-CN"); that constant still governs
+# live per-request locale resolution (get_locale_from_request()) and is
+# untouched - this only changes which catalog a missing translation key
+# falls back to.
+FALLBACK_LOCALE = detect_cli_locale()
+
 
 def get_messages(locale: str) -> Dict[str, str]:
-    return _CATALOGS.get(locale, _CATALOGS[DEFAULT_LOCALE])
+    return _CATALOGS.get(locale, _CATALOGS[FALLBACK_LOCALE])
 
 
 def t(key: str, locale: str, **params: Any) -> str:
     messages = get_messages(locale)
     template = messages.get(key)
     if not template:
-        template = get_messages(DEFAULT_LOCALE).get(key, key)
+        # A key missing from the requested locale's catalog: try the
+        # deployment default next, then English, before giving up and
+        # showing the raw key. Two lookups in the worst case, but a missing
+        # translation should degrade to *some* readable language, not a
+        # dotted key leaking into an API response or chat message.
+        template = get_messages(FALLBACK_LOCALE).get(key) or EN_MESSAGES.get(key, key)
     if not params:
         return template
     try:
