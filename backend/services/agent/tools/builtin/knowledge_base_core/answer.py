@@ -5,19 +5,21 @@ import re
 from typing import Any, Dict, Iterable, List, Optional
 
 from backend.services.agent.tools.builtin.business_query_core.planner_base import run_agent_planner_completion
-from backend.services.agent.tools.builtin._fallback_strings import kb_headers, kb_string
+from backend.services.agent.tools.builtin._fallback_strings import kb_citation_text, kb_headers, kb_string
 
 from .models import RetrievalHit
 
 
-def _source_label(hit: RetrievalHit) -> str:
-    parts = [f"《{hit.file_name}》"]
+def _source_label(hit: RetrievalHit, language: Optional[str]) -> str:
+    quote_open = kb_citation_text("file_quote_open", language)
+    quote_close = kb_citation_text("file_quote_close", language)
+    parts = [f"{quote_open}{hit.file_name}{quote_close}"]
     section = str(hit.source.get("section_path") or "").strip()
     if section:
         parts.append(section)
     page = hit.source.get("page_start") or hit.source.get("page_end")
     if page:
-        parts.append(f"页码 {page}")
+        parts.append(kb_citation_text("page_label", language).format(page=page))
     return " / ".join(parts)
 
 
@@ -26,13 +28,13 @@ def _snippet(text: str, *, limit: int = 220) -> str:
     return normalized[:limit] + ("..." if len(normalized) > limit else "")
 
 
-def build_context(hits: Iterable[RetrievalHit], *, max_chars: int) -> str:
+def build_context(hits: Iterable[RetrievalHit], *, max_chars: int, language: Optional[str] = None) -> str:
     blocks: List[str] = []
     used = 0
     for index, hit in enumerate(hits, start=1):
         text = hit.text or str(hit.source.get("metadata_text") or "")
         block = (
-            f"[{index}] 来源：{_source_label(hit)}\n"
+            f"[{index}] 来源：{_source_label(hit, language)}\n"
             f"文件路径：{hit.source.get('canonical_path') or hit.source.get('source_uri') or ''}\n"
             f"内容：{text.strip()}"
         ).strip()
@@ -76,8 +78,9 @@ def evidence_only_answer(query: str, hits: List[RetrievalHit], *, language: Opti
     if not display_hits:
         display_hits = hits[:3]
     lines = [headers["answer"], "", kb_string("found_related", language), "", headers["evidence"]]
+    separator = kb_citation_text("citation_separator", language)
     for hit in display_hits:
-        lines.append(f"- {_source_label(hit)}：{_snippet(hit.text or hit.source.get('metadata_text') or '')}")
+        lines.append(f"- {_source_label(hit, language)}{separator}{_snippet(hit.text or hit.source.get('metadata_text') or '')}")
     lines.extend(["", headers["not_covered"], "", f"- {kb_string('no_body_text', language).format(query=query)}"])
     return "\n".join(lines)
 
@@ -125,7 +128,7 @@ def generate_answer(
         return evidence_only_answer(query, hits, language=language)
     if _is_existence_query(query):
         return evidence_only_answer(query, hits, language=language)
-    context = build_context(hits, max_chars=max_context_chars)
+    context = build_context(hits, max_chars=max_context_chars, language=language)
     headers = kb_headers(language)
     messages = [
         {

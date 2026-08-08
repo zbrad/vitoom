@@ -59,6 +59,30 @@ KB_STRINGS: Dict[str, Dict[str, str]] = {
     },
 }
 
+# Citation formatting for knowledge_base_core/answer.py's _source_label(),
+# used both in the LLM-facing retrieval context and in the deterministic
+# evidence_only_answer() fallback shown directly to the user.
+KB_CITATION_TEXT: Dict[str, Dict[str, str]] = {
+    "English": {
+        "file_quote_open": '"',
+        "file_quote_close": '"',
+        "page_label": "p. {page}",
+        "citation_separator": ": ",
+    },
+    "Chinese": {
+        "file_quote_open": "《",
+        "file_quote_close": "》",
+        "page_label": "页码 {page}",
+        "citation_separator": "：",
+    },
+    "Japanese": {
+        "file_quote_open": "「",
+        "file_quote_close": "」",
+        "page_label": "ページ {page}",
+        "citation_separator": "：",
+    },
+}
+
 HR_STRINGS: Dict[str, Dict[str, str]] = {
     "English": {
         "no_matching_people": "No matching employees found.",
@@ -213,6 +237,11 @@ def kb_headers(language: Optional[str]) -> Dict[str, str]:
 def kb_string(key: str, language: Optional[str]) -> str:
     table = KB_STRINGS.get(language or "", KB_STRINGS[DEFAULT_LANGUAGE])
     return table.get(key, KB_STRINGS[DEFAULT_LANGUAGE][key])
+
+
+def kb_citation_text(key: str, language: Optional[str]) -> str:
+    table = KB_CITATION_TEXT.get(language or "", KB_CITATION_TEXT[DEFAULT_LANGUAGE])
+    return table.get(key, KB_CITATION_TEXT[DEFAULT_LANGUAGE][key])
 
 
 def hr_string(key: str, language: Optional[str]) -> str:
