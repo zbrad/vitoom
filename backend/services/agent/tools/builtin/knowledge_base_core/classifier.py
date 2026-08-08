@@ -1,16 +1,32 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 import time
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable, Dict, List, Optional
 
 from backend.services.agent.settings import get_agent_internal_user_id
 from backend.services.agent.tools.builtin.business_query_core.planner_base import parse_llm_json_object, run_agent_planner_completion
 
+logger = logging.getLogger(__name__)
 
 DEFAULT_TAXONOMY = ("财务", "项目", "人事", "合同法务", "产品", "技术", "未分类_待确认")
 ProgressCallback = Callable[[str, Dict[str, Any]], None]
+
+
+def _default_language() -> str:
+    """Resolve the project's default response language (see chat/language.py).
+
+    Deferred import for the same reason as _fallback_strings.py's
+    _default_language(): backend.services.chat's __init__ eagerly imports
+    master_runtime.py, which imports back from backend.services.agent.* -
+    the package this module lives in - so importing it at module load time
+    risks a circular import.
+    """
+    from backend.services.chat.language import DEFAULT_RESPONSE_LANGUAGE
+
+    return DEFAULT_RESPONSE_LANGUAGE
 
 
 def _coerce_confidence(value: Any) -> float:
@@ -60,6 +76,13 @@ def resolve_classifier_user_id(user_id: str = "") -> str:
 def normalize_classification(raw: Dict[str, Any], *, threshold: float = 0.75) -> Dict[str, Any]:
     domain = str(raw.get("domain") or "").strip()
     if domain not in DEFAULT_TAXONOMY:
+        if domain:
+            # domain is a fixed-enum field (see the classifier system prompt's
+            # "must use verbatim" instruction); a non-empty value that still
+            # misses DEFAULT_TAXONOMY is most likely the LLM translating it
+            # under the response-language directive rather than a genuine
+            # low-confidence case, so it's worth distinguishing in logs.
+            logger.warning("Classifier returned domain %r outside DEFAULT_TAXONOMY; falling back to unclassified", domain)
         domain = "未分类_待确认"
     confidence = _coerce_confidence(raw.get("confidence"))
     low_confidence = confidence < threshold
@@ -81,6 +104,7 @@ def classify_source_row(
     threshold: float = 0.75,
     user_id: str = "agent-system",
     preview_text: str = "",
+    language: Optional[str] = None,
 ) -> Dict[str, Any]:
     preview = preview_text if preview_text else preview_text_for_classification(row)
     effective_user_id = resolve_classifier_user_id(user_id)
@@ -90,6 +114,7 @@ def classify_source_row(
             "content": (
                 "你是企业本地知识库源文件分类器。只根据用户给出的文件元数据和少量预览分类，不要臆测。"
                 "可选 domain 只能是：财务、项目、人事、合同法务、产品、技术、未分类_待确认。"
+                "domain 字段必须逐字使用上述汉字之一，不得翻译或改写成其他语言。"
                 "必须只输出 JSON 对象，字段为 domain/topic/subtopic/summary/confidence/reason/suggested_tags。"
             ),
         },
@@ -110,7 +135,12 @@ def classify_source_row(
             ),
         },
     ]
-    raw = run_agent_planner_completion(messages, user_id=effective_user_id, error_label="knowledge source classifier")
+    raw = run_agent_planner_completion(
+        messages,
+        user_id=effective_user_id,
+        error_label="knowledge source classifier",
+        language=language or _default_language(),
+    )
     parsed = parse_llm_json_object(raw, error_message="knowledge source classifier must return a JSON object")
     return normalize_classification(parsed, threshold=threshold)
 
@@ -124,6 +154,7 @@ def classify_rows(
     progress_every: int = 25,
     resume: bool = True,
     checkpoint_callback: Callable[[], None] | None = None,
+    language: Optional[str] = None,
 ) -> Dict[str, int]:
     classified = 0
     low_confidence = 0
@@ -171,7 +202,7 @@ def classify_rows(
             continue
         processed += 1
         try:
-            result = classify_source_row(row, threshold=threshold, user_id=user_id)
+            result = classify_source_row(row, threshold=threshold, user_id=user_id, language=language)
             existing_tags = _clean_tags(row.get("tags"))
             row.update(result)
             row["tags"] = sorted(set(existing_tags + _clean_tags(result.get("tags"))))

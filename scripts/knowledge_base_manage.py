@@ -81,6 +81,7 @@ def cmd_organize(args: argparse.Namespace) -> None:
         resume=not args.no_resume,
         dry_run=args.dry_run,
         max_files=args.max_files,
+        language=args.language or None,
     )
     _json_print(summary)
 
@@ -218,6 +219,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--classify", action="store_true", help="organize 时调用内部 LLM 对源文件分类")
     parser.add_argument("--classifier-user-id", default="", help="LLM 分类使用的有效用户 ID；为空时自动选择一个 active/admin 用户")
     parser.add_argument("--low-confidence-threshold", type=float, default=0.75, help="LLM 分类低置信阈值")
+    parser.add_argument(
+        "--language",
+        default="",
+        choices=("", "English", "Chinese", "Japanese"),
+        help=(
+            "LLM 分类结果中自由文本字段（summary/topic/subtopic/reason）使用的语言；"
+            "留空则沿用当前进程环境的部署默认语言（VITOOM_LOCALE/LC_ALL/LANG，见 backend/services/chat/language.py）。"
+            "本脚本不读取 .env，需在已注入这些变量的环境（如容器内）运行才能生效"
+        ),
+    )
     parser.add_argument("--progress-every", type=int, default=10, help="organize 进度输出间隔，按文件数计")
     parser.add_argument("--quiet", action="store_true", help="关闭 organize 进度输出")
     parser.add_argument("--no-resume", action="store_true", help="关闭默认断点续跑，重新分类已完成文件")

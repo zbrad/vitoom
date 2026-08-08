@@ -160,12 +160,13 @@ def archive_file_path(
     knowledge_base_id: str = "default",
     refresh: bool = True,
     client: Optional[KnowledgeBaseEsClient] = None,
+    language: Optional[str] = None,
 ) -> Dict[str, Any]:
     if is_skipped_media_file(path):
         raise RuntimeError("音频、视频、图片类文件当前不入库，已跳过。")
     row = _metadata_row_for_file(path, source_url=source_url, source_kind=source_kind, user_id=user_id, title=title)
     if classify:
-        result = classify_source_row(row, user_id=user_id)
+        result = classify_source_row(row, user_id=user_id, language=language)
         existing_tags = list(row.get("tags") or [])
         row.update(result)
         row["tags"] = sorted(set(existing_tags + list(result.get("tags") or [])))
@@ -198,9 +199,26 @@ def archive_file_path(
     return {"document": row, "ingest": ingest_summary, "manifest_path": str(manifest_path)}
 
 
-def archive_url(url: str, *, user_id: str, title: str = "", classify: bool = True, knowledge_base_id: str = "default") -> Dict[str, Any]:
+def archive_url(
+    url: str,
+    *,
+    user_id: str,
+    title: str = "",
+    classify: bool = True,
+    knowledge_base_id: str = "default",
+    language: Optional[str] = None,
+) -> Dict[str, Any]:
     path = download_url_to_archive(url, user_id=user_id)
-    return archive_file_path(path, user_id=user_id, source_url=url, source_kind="url", title=title, classify=classify, knowledge_base_id=knowledge_base_id)
+    return archive_file_path(
+        path,
+        user_id=user_id,
+        source_url=url,
+        source_kind="url",
+        title=title,
+        classify=classify,
+        knowledge_base_id=knowledge_base_id,
+        language=language,
+    )
 
 
 def archive_conversation(
@@ -219,4 +237,12 @@ def archive_conversation(
         else content
     )
     path = save_markdown_to_archive(markdown, user_id=user_id, title=title)
-    return archive_file_path(path, user_id=user_id, source_kind="conversation", title=title, classify=classify, knowledge_base_id=knowledge_base_id)
+    return archive_file_path(
+        path,
+        user_id=user_id,
+        source_kind="conversation",
+        title=title,
+        classify=classify,
+        knowledge_base_id=knowledge_base_id,
+        language=language,
+    )

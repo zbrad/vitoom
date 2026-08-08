@@ -89,6 +89,7 @@ def build_knowledge_base_archive_tool(*, context: Optional[Dict[str, Any]] = Non
                         title=title,
                         classify=classify,
                         knowledge_base_id=knowledge_base_id or "default",
+                        language=bound_language,
                     )
                 elif normalized_mode in {"conversation", "chat", "markdown"}:
                     if not str(content or "").strip():

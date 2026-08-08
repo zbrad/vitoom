@@ -9,7 +9,7 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List
+from typing import Any, Callable, Dict, Iterable, List, Optional
 
 from .source_manifest import read_manifest, write_manifest
 
@@ -271,6 +271,7 @@ def organize_sources(
     resume: bool = True,
     dry_run: bool = False,
     max_files: int = 0,
+    language: Optional[str] = None,
 ) -> Dict[str, Any]:
     overall_started = time.perf_counter()
     requested_roots = [Path(item) for item in scan_roots]
@@ -316,6 +317,7 @@ def organize_sources(
             progress_every=progress_every,
             resume=resume,
             checkpoint_callback=checkpoint,
+            language=language,
         )
     copied = copy_canonical_files(rows, dry_run=dry_run, progress_callback=progress_callback, progress_every=progress_every) if copy_files else 0
     if not dry_run:
