@@ -30,6 +30,8 @@ for _logger_name in ("pdfminer", "pdfminer.pdffont", "fontTools"):
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
+from backend.i18n.locale import detect_cli_locale  # noqa: E402
+from backend.i18n.translator import t  # noqa: E402
 from backend.services.agent import settings as agent_settings  # noqa: E402
 from backend.services.agent.tools.builtin.knowledge_base_query import run_knowledge_base_query  # noqa: E402
 from backend.services.agent.tools.builtin.knowledge_base_core.es_client import KnowledgeBaseEsClient  # noqa: E402
@@ -200,48 +202,63 @@ def cmd_query(args: argparse.Namespace) -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Manage local knowledge base sources and Elasticsearch indices")
-    parser.add_argument("command", choices=["organize", "create", "clear", "ingest", "refresh", "smoke", "query"], help="操作类型")
-    parser.add_argument("query", nargs="?", default="", help="query 命令的自然语言问题")
-    parser.add_argument("--url", default=agent_settings.get_knowledge_base_es_url(), help="Elasticsearch URL")
-    parser.add_argument("--username", default=agent_settings.get_knowledge_base_es_username(), help="ES Basic Auth 用户名")
-    parser.add_argument("--password", default=agent_settings.get_knowledge_base_es_password(), help="ES Basic Auth 密码")
-    parser.add_argument("--timeout", type=float, default=agent_settings.get_knowledge_base_request_timeout_seconds(), help="请求超时秒数")
-    parser.add_argument("--document-index", default=agent_settings.get_knowledge_base_document_index(), help="文档索引名")
-    parser.add_argument("--chunk-index", default=agent_settings.get_knowledge_base_chunk_index(), help="Chunk 索引名")
-    parser.add_argument("--embedding-dims", type=int, default=agent_settings.get_knowledge_base_embedding_dims(), help="Embedding 维度")
-    parser.add_argument("--manifest", default=str(agent_settings.get_knowledge_base_manifest_path()), help="manifest JSONL 路径")
-    parser.add_argument("--scan-state", default=str(agent_settings.get_knowledge_base_scan_state_path()), help="扫描状态 JSON 路径")
-    parser.add_argument("--canonical-root", default=str(agent_settings.get_knowledge_base_canonical_root()), help="规范源文件仓库根目录")
-    parser.add_argument("--scan-root", action="append", default=[], help="可重复传入的源文件扫描根目录")
-    parser.add_argument("--no-copy", action="store_true", help="只生成 manifest，不复制文件到 canonical root")
-    parser.add_argument("--no-skip-state", action="store_true", help="忽略 scan state，强制重新扫描")
-    parser.add_argument("--classify", action="store_true", help="organize 时调用内部 LLM 对源文件分类")
-    parser.add_argument("--classifier-user-id", default="", help="LLM 分类使用的有效用户 ID；为空时自动选择一个 active/admin 用户")
-    parser.add_argument("--low-confidence-threshold", type=float, default=0.75, help="LLM 分类低置信阈值")
+    locale = detect_cli_locale()
+
+    def _t(key: str) -> str:
+        return t(key, locale)
+
+    parser = argparse.ArgumentParser(description=_t("kb_manage.cli.description"))
+    parser.add_argument(
+        "command", choices=["organize", "create", "clear", "ingest", "refresh", "smoke", "query"], help=_t("kb_manage.cli.command_help")
+    )
+    parser.add_argument("query", nargs="?", default="", help=_t("kb_manage.cli.query_help"))
+    parser.add_argument("--url", default=agent_settings.get_knowledge_base_es_url(), help=_t("kb_manage.cli.url_help"))
+    parser.add_argument("--username", default=agent_settings.get_knowledge_base_es_username(), help=_t("kb_manage.cli.username_help"))
+    parser.add_argument("--password", default=agent_settings.get_knowledge_base_es_password(), help=_t("kb_manage.cli.password_help"))
+    parser.add_argument(
+        "--timeout", type=float, default=agent_settings.get_knowledge_base_request_timeout_seconds(), help=_t("kb_manage.cli.timeout_help")
+    )
+    parser.add_argument(
+        "--document-index", default=agent_settings.get_knowledge_base_document_index(), help=_t("kb_manage.cli.document_index_help")
+    )
+    parser.add_argument("--chunk-index", default=agent_settings.get_knowledge_base_chunk_index(), help=_t("kb_manage.cli.chunk_index_help"))
+    parser.add_argument(
+        "--embedding-dims", type=int, default=agent_settings.get_knowledge_base_embedding_dims(), help=_t("kb_manage.cli.embedding_dims_help")
+    )
+    parser.add_argument(
+        "--manifest", default=str(agent_settings.get_knowledge_base_manifest_path()), help=_t("kb_manage.cli.manifest_help")
+    )
+    parser.add_argument(
+        "--scan-state", default=str(agent_settings.get_knowledge_base_scan_state_path()), help=_t("kb_manage.cli.scan_state_help")
+    )
+    parser.add_argument(
+        "--canonical-root", default=str(agent_settings.get_knowledge_base_canonical_root()), help=_t("kb_manage.cli.canonical_root_help")
+    )
+    parser.add_argument("--scan-root", action="append", default=[], help=_t("kb_manage.cli.scan_root_help"))
+    parser.add_argument("--no-copy", action="store_true", help=_t("kb_manage.cli.no_copy_help"))
+    parser.add_argument("--no-skip-state", action="store_true", help=_t("kb_manage.cli.no_skip_state_help"))
+    parser.add_argument("--classify", action="store_true", help=_t("kb_manage.cli.classify_help"))
+    parser.add_argument("--classifier-user-id", default="", help=_t("kb_manage.cli.classifier_user_id_help"))
+    parser.add_argument("--low-confidence-threshold", type=float, default=0.75, help=_t("kb_manage.cli.low_confidence_threshold_help"))
     parser.add_argument(
         "--language",
         default="",
         choices=("", "English", "Chinese", "Japanese"),
-        help=(
-            "LLM 分类结果中自由文本字段（summary/topic/subtopic/reason）使用的语言；"
-            "留空则沿用当前进程环境的部署默认语言（VITOOM_LOCALE/LC_ALL/LANG，见 backend/services/chat/language.py）。"
-            "本脚本不读取 .env，需在已注入这些变量的环境（如容器内）运行才能生效"
-        ),
+        help=_t("kb_manage.cli.language_help"),
     )
-    parser.add_argument("--progress-every", type=int, default=10, help="organize 进度输出间隔，按文件数计")
-    parser.add_argument("--quiet", action="store_true", help="关闭 organize 进度输出")
-    parser.add_argument("--no-resume", action="store_true", help="关闭默认断点续跑，重新分类已完成文件")
-    parser.add_argument("--max-files", type=int, default=0, help="最多扫描文件数，0 表示不限")
-    parser.add_argument("--dry-run", action="store_true", help="只预览，不写 manifest/ES")
-    parser.add_argument("--ensure-indices", action="store_true", help="ingest 前先创建缺失索引")
-    parser.add_argument("--yes", action="store_true", help="确认执行危险操作，例如 clear")
-    parser.add_argument("--knowledge-base-id", default="default", help="知识库 ID")
-    parser.add_argument("--smoke-query", default="知识库", help="smoke 命令使用的基础检索词")
-    parser.add_argument("--top-k", type=int, default=8, help="query 命令最终来源数量")
-    parser.add_argument("--debug", action="store_true", help="query 命令输出 debug")
-    parser.add_argument("--user-id", default="agent-system", help="query 权限上下文用户 ID")
-    parser.add_argument("--tenant-id", default="default", help="query 权限上下文租户 ID")
+    parser.add_argument("--progress-every", type=int, default=10, help=_t("kb_manage.cli.progress_every_help"))
+    parser.add_argument("--quiet", action="store_true", help=_t("kb_manage.cli.quiet_help"))
+    parser.add_argument("--no-resume", action="store_true", help=_t("kb_manage.cli.no_resume_help"))
+    parser.add_argument("--max-files", type=int, default=0, help=_t("kb_manage.cli.max_files_help"))
+    parser.add_argument("--dry-run", action="store_true", help=_t("kb_manage.cli.dry_run_help"))
+    parser.add_argument("--ensure-indices", action="store_true", help=_t("kb_manage.cli.ensure_indices_help"))
+    parser.add_argument("--yes", action="store_true", help=_t("kb_manage.cli.yes_help"))
+    parser.add_argument("--knowledge-base-id", default="default", help=_t("kb_manage.cli.knowledge_base_id_help"))
+    parser.add_argument("--smoke-query", default="知识库", help=_t("kb_manage.cli.smoke_query_help"))
+    parser.add_argument("--top-k", type=int, default=8, help=_t("kb_manage.cli.top_k_help"))
+    parser.add_argument("--debug", action="store_true", help=_t("kb_manage.cli.debug_help"))
+    parser.add_argument("--user-id", default="agent-system", help=_t("kb_manage.cli.user_id_help"))
+    parser.add_argument("--tenant-id", default="default", help=_t("kb_manage.cli.tenant_id_help"))
     return parser.parse_args()
 
 
