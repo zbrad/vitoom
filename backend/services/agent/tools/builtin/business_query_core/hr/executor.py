@@ -21,7 +21,13 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin
 from urllib.request import Request, urlopen
 
-from backend.services.agent.tools.builtin._fallback_strings import current_hr_language, hr_string
+from backend.services.agent.tools.builtin._fallback_strings import (
+    current_hr_language,
+    hr_attribute_label,
+    hr_attribute_text,
+    hr_field_label,
+    hr_string,
+)
 from backend.services.agent.tools.builtin.business_query_core.executor_base import (
     placeholder_cost_check as base_placeholder_cost_check,
     placeholder_permission_check as base_placeholder_permission_check,
@@ -1687,11 +1693,16 @@ def _format_dsl_result_lines(search_body: Dict[str, Any], response: Dict[str, An
     attribute_fields = _requested_attribute_fields(query)
     if rows and attribute_fields and not _looks_like_list_request(query):
         lines = []
+        language = current_hr_language()
         for row in rows:
-            subject = row.get("name") or row.get("employee_id") or "该员工"
+            subject = row.get("name") or row.get("employee_id") or hr_attribute_text("unnamed_subject", language)
             for field in attribute_fields:
                 value = _attribute_value(row, field)
-                lines.append(f"{subject}的{_field_label(field)}是{_format_attribute_value(field, value)}。")
+                lines.append(
+                    hr_attribute_text("attribute_sentence", language).format(
+                        subject=subject, label=_field_label(field), value=_format_attribute_value(field, value)
+                    )
+                )
         return lines
     if rows and _looks_like_detail_request(query):
         lines = [f"找到 {total} 名匹配人员："]
@@ -1705,7 +1716,10 @@ def _format_dsl_result_lines(search_body: Dict[str, Any], response: Dict[str, An
     if "tenure_years" in attribute_fields:
         for row in rows:
             tenure = _attribute_value(row, "tenure_years")
-            lines.append(f"- {sample_backend._format_any_person(row)}，入职年限{_format_attribute_value('tenure_years', tenure)}")  # noqa: SLF001
+            tenure_note = hr_attribute_text("tenure_note", current_hr_language()).format(
+                value=_format_attribute_value("tenure_years", tenure)
+            )
+            lines.append(f"- {sample_backend._format_any_person(row)}{tenure_note}")  # noqa: SLF001
     else:
         lines.extend(sample_backend._format_any_people(rows))  # noqa: SLF001
     return lines
@@ -1788,18 +1802,26 @@ def _execute_attribute_lookup(query_spec: Dict[str, Any]) -> tuple[List[str], Li
         return [hr_string("no_matching_employee_guidance", current_hr_language())], [], {"backend": "es"}
 
     lines: List[str] = []
+    language = current_hr_language()
     for row in rows:
-        name = str(row.get("name") or row.get("employee_id") or "该员工")
+        name = str(row.get("name") or row.get("employee_id") or hr_attribute_text("unnamed_subject", language))
         values = [_format_attribute_value(field, _attribute_value(row, field)) for field in fields]
         if len(fields) == 1:
-            lines.append(f"{name}的{_field_label(fields[0])}是{values[0]}。")
+            lines.append(
+                hr_attribute_text("attribute_sentence", language).format(
+                    subject=name, label=_field_label(fields[0]), value=values[0]
+                )
+            )
         else:
             subject = name
             employee_id = str(row.get("employee_id") or "").strip()
             if employee_id:
                 subject = f"{name}（{employee_id}）"
             labels = [_attribute_label(field) for field in fields]
-            lines.append(f"{subject}的信息：{'；'.join(f'{label}：{value}' for label, value in zip(labels, values))}。")
+            pair_sep = hr_attribute_text("attribute_pair_separator", language)
+            pair_join = hr_attribute_text("attribute_pair_joiner", language)
+            pairs = pair_join.join(f"{label}{pair_sep}{value}" for label, value in zip(labels, values))
+            lines.append(hr_attribute_text("attribute_summary", language).format(subject=subject, pairs=pairs))
     return lines, rows, {"backend": "es", "select_fields": fields}
 
 
@@ -1886,43 +1908,31 @@ def _execute_es_document_fetch(query_spec: Dict[str, Any]) -> tuple[List[str], L
 
 
 def _field_label(field: str) -> str:
-    return {
-        "employee_id": "工号",
-        "name": "姓名",
-        "office_city": "办公地点",
-        "email": "邮箱",
-        "department_code": "部门编码",
-        "department_name": "部门",
-        "job_title": "职位",
-        "manager_id": "经理",
-        "hire_date": "入职日期",
-        "tenure_years": "入职年限",
-        "employment_status": "状态",
-        "attrition_risk": "离职风险",
-    }.get(field, field)
+    return hr_field_label(field, current_hr_language())
 
 
 def _attribute_label(field: str) -> str:
-    if field == "office_city":
-        return "办公城市"
-    return _field_label(field)
+    return hr_attribute_label(field, current_hr_language())
 
 
 def _format_attribute_value(field: str, value: Any) -> str:
+    language = current_hr_language()
     if _is_empty_attribute_value(value):
-        return "未填"
+        return hr_attribute_text("unfilled", language)
     if isinstance(value, list):
-        return "、".join(str(item) for item in value if not _is_empty_attribute_value(item)) or "未填"
+        separator = hr_attribute_text("list_separator", language)
+        joined = separator.join(str(item) for item in value if not _is_empty_attribute_value(item))
+        return joined or hr_attribute_text("unfilled", language)
     if field == "tenure_years":
         try:
-            return f"约 {float(value):.1f} 年"
+            return hr_attribute_text("tenure_years", language).format(value=float(value))
         except (TypeError, ValueError):
             return str(value)
     if field == "employment_status":
         if value == "active":
-            return "在职"
+            return hr_attribute_text("active", language)
         if value in {"terminated", "retired"}:
-            return "非在职"
+            return hr_attribute_text("inactive", language)
     return str(value)
 
 

@@ -78,6 +78,119 @@ HR_STRINGS: Dict[str, Dict[str, str]] = {
 }
 
 
+HR_FIELD_LABELS: Dict[str, Dict[str, str]] = {
+    "English": {
+        "employee_id": "Employee ID",
+        "name": "Name",
+        "office_city": "Office Location",
+        "email": "Email",
+        "department_code": "Department Code",
+        "department_name": "Department",
+        "job_title": "Job Title",
+        "manager_id": "Manager",
+        "hire_date": "Hire Date",
+        "tenure_years": "Tenure",
+        "employment_status": "Status",
+        "attrition_risk": "Attrition Risk",
+    },
+    "Chinese": {
+        "employee_id": "工号",
+        "name": "姓名",
+        "office_city": "办公地点",
+        "email": "邮箱",
+        "department_code": "部门编码",
+        "department_name": "部门",
+        "job_title": "职位",
+        "manager_id": "经理",
+        "hire_date": "入职日期",
+        "tenure_years": "入职年限",
+        "employment_status": "状态",
+        "attrition_risk": "离职风险",
+    },
+    "Japanese": {
+        "employee_id": "社員ID",
+        "name": "氏名",
+        "office_city": "勤務地",
+        "email": "メール",
+        "department_code": "部門コード",
+        "department_name": "部門",
+        "job_title": "役職",
+        "manager_id": "マネージャー",
+        "hire_date": "入社日",
+        "tenure_years": "勤続年数",
+        "employment_status": "在籍状況",
+        "attrition_risk": "離職リスク",
+    },
+}
+
+# office_city gets a distinct label ("office city" vs "office location") when it
+# appears alongside other attributes in a multi-field summary sentence.
+HR_ATTRIBUTE_LABEL_OVERRIDES: Dict[str, Dict[str, str]] = {
+    "English": {"office_city": "Office City"},
+    "Chinese": {"office_city": "办公城市"},
+    "Japanese": {"office_city": "勤務都市"},
+}
+
+HR_ATTRIBUTE_TEXT: Dict[str, Dict[str, str]] = {
+    "English": {
+        "unfilled": "Not filled in",
+        "active": "Active",
+        "inactive": "Inactive",
+        "tenure_years": "About {value:.1f} years",
+        "list_separator": ", ",
+        "unnamed_subject": "This employee",
+        "attribute_sentence": "{subject}'s {label} is {value}.",
+        "attribute_summary": "{subject}'s info: {pairs}.",
+        "attribute_pair_separator": ": ",
+        "attribute_pair_joiner": "; ",
+        "tenure_note": ", tenure {value}",
+    },
+    "Chinese": {
+        "unfilled": "未填",
+        "active": "在职",
+        "inactive": "非在职",
+        "tenure_years": "约 {value:.1f} 年",
+        "list_separator": "、",
+        "unnamed_subject": "该员工",
+        "attribute_sentence": "{subject}的{label}是{value}。",
+        "attribute_summary": "{subject}的信息：{pairs}。",
+        "attribute_pair_separator": "：",
+        "attribute_pair_joiner": "；",
+        "tenure_note": "，入职年限{value}",
+    },
+    "Japanese": {
+        "unfilled": "未入力",
+        "active": "在籍",
+        "inactive": "非在籍",
+        "tenure_years": "約 {value:.1f} 年",
+        "list_separator": "、",
+        "unnamed_subject": "この社員",
+        "attribute_sentence": "{subject}の{label}は{value}です。",
+        "attribute_summary": "{subject}の情報：{pairs}。",
+        "attribute_pair_separator": "：",
+        "attribute_pair_joiner": "；",
+        "tenure_note": "、勤続年数{value}",
+    },
+}
+
+
+def hr_field_label(field: str, language: Optional[str]) -> str:
+    table = HR_FIELD_LABELS.get(language or "", HR_FIELD_LABELS[DEFAULT_LANGUAGE])
+    return table.get(field, field)
+
+
+def hr_attribute_label(field: str, language: Optional[str]) -> str:
+    overrides = HR_ATTRIBUTE_LABEL_OVERRIDES.get(language or "", HR_ATTRIBUTE_LABEL_OVERRIDES[DEFAULT_LANGUAGE])
+    if field in overrides:
+        return overrides[field]
+    return hr_field_label(field, language)
+
+
+def hr_attribute_text(key: str, language: Optional[str]) -> str:
+    table = HR_ATTRIBUTE_TEXT.get(language or "", HR_ATTRIBUTE_TEXT[DEFAULT_LANGUAGE])
+    return table.get(key, HR_ATTRIBUTE_TEXT[DEFAULT_LANGUAGE][key])
+
+
 def kb_headers(language: Optional[str]) -> Dict[str, str]:
     return KB_HEADERS.get(language or "", KB_HEADERS[DEFAULT_LANGUAGE])
 
