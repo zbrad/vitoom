@@ -960,24 +960,6 @@ def _build_query_spec(text: str) -> Dict[str, Any]:
     return spec
 
 
-def _placeholder_permission_check(query_spec: Dict[str, Any]) -> Dict[str, Any]:
-    return {
-        "enabled": False,
-        "status": "placeholder_passed",
-        "note": "版本不实现真实权限校验；生产版本应在这里注入行级、字段级、操作级权限。",
-        "query_spec_intent": query_spec.get("intent"),
-    }
-
-
-def _placeholder_cost_check(query_spec: Dict[str, Any]) -> Dict[str, Any]:
-    return {
-        "enabled": False,
-        "status": "placeholder_passed",
-        "note": "版本不实现真实查询成本控制；生产版本应限制返回行数、聚合 bucket、向量候选数等。",
-        "limit": query_spec.get("limit"),
-    }
-
-
 def _execute_aggregation(query_spec: Dict[str, Any]) -> Tuple[List[str], List[EmployeeRecord]]:
     language = current_hr_language()
     records = _apply_filters(_EMPLOYEES, query_spec.get("filters") or [])
@@ -2053,8 +2035,8 @@ def _calculate_tenure_years(hire_date: Any, *, today: date | None = None) -> Any
 
 
 def placeholder_permission_check(query_spec: Dict[str, Any]) -> Dict[str, Any]:
-    return base_placeholder_permission_check(query_spec, domain="hr")
+    return base_placeholder_permission_check(query_spec, domain="hr", language=current_hr_language())
 
 
 def placeholder_cost_check(query_spec: Dict[str, Any]) -> Dict[str, Any]:
-    return base_placeholder_cost_check(query_spec)
+    return base_placeholder_cost_check(query_spec, language=current_hr_language())

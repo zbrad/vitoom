@@ -197,6 +197,40 @@ HR_STRINGS: Dict[str, Dict[str, str]] = {
     },
 }
 
+# business_query_core/executor_base.py's placeholder permission/cost check
+# "note" fields. That module is shared across business-query domains (its
+# own docstring: "Shared executor primitives for business query tools"; it
+# already takes a `domain` param) - HR is its only caller today, but the
+# text itself isn't HR-specific, so it gets its own table rather than
+# living in HR_STRINGS, matching the KB_ARCHIVE_STRINGS/KB_CLASSIFIER_STRINGS
+# precedent of one table per feature rather than piling into a neighbor.
+BUSINESS_QUERY_STRINGS: Dict[str, Dict[str, str]] = {
+    "English": {
+        "permission_check_note": (
+            "Permission check is a placeholder in this stage; a production system should inject "
+            "row-, field-, and action-level permissions here."
+        ),
+        "cost_check_note": (
+            "This stage only limits the QuerySpec schema and `limit`; query budgets and bucket caps "
+            "are a later addition."
+        ),
+    },
+    "Chinese": {
+        "permission_check_note": "第一阶段保留权限校验占位；真实业务系统接入时应注入行级、字段级、操作级权限。",
+        "cost_check_note": "第一阶段限制 QuerySpec schema 与 limit；后续接入查询预算和 bucket 上限。",
+    },
+    "Japanese": {
+        "permission_check_note": (
+            "現段階では権限チェックはプレースホルダーです。本番システムではここで行レベル・"
+            "フィールドレベル・操作レベルの権限を適用する必要があります。"
+        ),
+        "cost_check_note": (
+            "現段階では QuerySpec のスキーマと limit のみを制限しています。クエリ予算や bucket "
+            "上限は今後追加予定です。"
+        ),
+    },
+}
+
 
 HR_FIELD_LABELS: Dict[str, Dict[str, str]] = {
     "English": {
@@ -608,6 +642,11 @@ def kb_classifier_string(key: str, language: Optional[str]) -> str:
 def hr_string(key: str, language: Optional[str]) -> str:
     table = HR_STRINGS.get(language or "", HR_STRINGS[_default_language()])
     return table.get(key, HR_STRINGS[_default_language()][key])
+
+
+def business_query_string(key: str, language: Optional[str]) -> str:
+    table = BUSINESS_QUERY_STRINGS.get(language or "", BUSINESS_QUERY_STRINGS[_default_language()])
+    return table.get(key, BUSINESS_QUERY_STRINGS[_default_language()][key])
 
 
 # HR executor's deterministic formatting (backend/services/agent/tools/builtin/
