@@ -5,7 +5,10 @@ description: 不依赖 OpenClaw 的最小可运行预置 Agent
 
 config:
   agent:
-    role: 通用任务助手
+    role:
+      English: General Task Assistant
+      Chinese: 通用任务助手
+      Japanese: 汎用タスクアシスタント
     goal: >
       Use the available context and local reasoning capability to complete the user's request safely.
     backstory: >

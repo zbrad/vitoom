@@ -17,6 +17,45 @@ from backend.utils import generate_uuid
 MAX_HISTORY_TURNS = 6  # build_prompt_with_history 默认回看的轮数
 RECENT_VERBATIM_TURNS = 1  # 最近多少轮保留原文，其余压缩成摘要
 
+# build_prompt_with_history()'s structural section labels. These wrap every
+# turn's prompt regardless of what the user actually said, so leaving them
+# hardcoded in Chinese put a Chinese-dominant skeleton around every prompt -
+# even for English-locale sessions with an all-English message. A model this
+# size is sensitive to that kind of structural language bias: it would keep
+# answering in Chinese despite an explicit "reply in English" instruction
+# elsewhere in the same prompt (see command_context["default_language"] in
+# backend/services/chat/master_runtime.py). Keyed by the same language-name
+# convention as backend/services/agent/tools/builtin/_fallback_strings.py.
+SECTION_LABELS: Dict[str, Dict[str, str]] = {
+    "English": {
+        "history_summary": "[History Summary]",
+        "past_conversation": "[Past Conversation]",
+        "current_input": "[Current Input]",
+    },
+    "Chinese": {
+        "history_summary": "[历史摘要]",
+        "past_conversation": "[过去对话]",
+        "current_input": "[本轮输入]",
+    },
+    "Japanese": {
+        "history_summary": "[履歴要約]",
+        "past_conversation": "[過去の会話]",
+        "current_input": "[今回の入力]",
+    },
+}
+
+
+def _section_labels(language: Optional[str]) -> Dict[str, str]:
+    if language in SECTION_LABELS:
+        return SECTION_LABELS[language]
+    # Deferred import: backend.services.chat's __init__ eagerly imports
+    # master_runtime.py, which imports build_prompt_with_history from this
+    # module - importing backend.services.chat.language at module load time
+    # would risk a circular import. Deferring to first call avoids that.
+    from backend.services.chat.language import DEFAULT_RESPONSE_LANGUAGE
+
+    return SECTION_LABELS.get(DEFAULT_RESPONSE_LANGUAGE, SECTION_LABELS["English"])
+
 
 class ConversationValidationError(ValueError):
     """会话相关校验异常。"""
@@ -171,6 +210,7 @@ def build_prompt_with_history(
     new_message: str,
     max_turns: int = MAX_HISTORY_TURNS,
     recent_verbatim_turns: int = RECENT_VERBATIM_TURNS,
+    language: Optional[str] = None,
 ) -> str:
     """把最近 max_turns 轮对话 + 新消息拼接成单段 prompt。
 
@@ -179,19 +219,26 @@ def build_prompt_with_history(
     - 更老的保留为单行摘要，每条截到 ``_SUMMARY_CHAR_CAP`` 字。
     - 超出 ``max_turns`` 的历史直接丢弃。
 
-    输出格式：
+    ``language`` selects the section-label language (see SECTION_LABELS);
+    falls back to the deployment default when not given. Passing the
+    session's resolved language keeps these structural labels from skewing
+    the model toward that language regardless of what the user actually
+    requested (see SECTION_LABELS docstring above).
 
-        [历史摘要]           # 可选，若有被压缩的老对话
+    输出格式（以 English labels 为例，实际 label 语言取决于 ``language``）：
+
+        [History Summary]     # 可选，若有被压缩的老对话
         - user: …
         - assistant: …
 
-        [过去对话]            # 可选，recent_verbatim_turns 轮原文
+        [Past Conversation]   # 可选，recent_verbatim_turns 轮原文
         user: …
         assistant: …
 
-        [本轮输入]
+        [Current Input]
         user: <new_message>
     """
+    labels = _section_labels(language)
     normalized_new = str(new_message or "").strip()
     total_messages = max_turns * 2
     history = ConversationMessage.list_by_conversation(
@@ -208,7 +255,7 @@ def build_prompt_with_history(
     lines: List[str] = []
 
     if older:
-        lines.append("[历史摘要]")
+        lines.append(labels["history_summary"])
         for item in older:
             role = str(item.get("role") or "").lower() or "unknown"
             summary = _truncate_for_summary(str(item.get("content") or ""))
@@ -217,7 +264,7 @@ def build_prompt_with_history(
         lines.append("")
 
     if recent:
-        lines.append("[过去对话]")
+        lines.append(labels["past_conversation"])
         for item in recent:
             role = str(item.get("role") or "").lower() or "unknown"
             content = str(item.get("content") or "").strip()
@@ -226,7 +273,7 @@ def build_prompt_with_history(
             lines.append(f"{role}: {content}")
         lines.append("")
 
-    lines.append("[本轮输入]")
+    lines.append(labels["current_input"])
     lines.append(f"user: {normalized_new}")
     return "\n".join(lines).strip()
 

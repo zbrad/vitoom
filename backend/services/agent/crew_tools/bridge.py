@@ -18,7 +18,7 @@ from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional
 
 from backend.core.logger import get_app_logger
-from backend.database import AgentRun
+from backend.database import AgentRun, Conversation
 from backend.services.agent.crews import CrewFactory
 from backend.services.agent.events import (
     record_crew_tool_invoked,
@@ -311,8 +311,25 @@ def _run_crew_sync(
         "config": preset_config,
     }
 
-    agent_specs: List[AgentSpec] = AgentSpec.list_from_agent_record(synthetic_agent_record)
-    task_specs: List[TaskSpec] = TaskSpec.list_from_agent_record(synthetic_agent_record)
+    # 嵌套 crew-tool 调用没有活跃 WS 连接可读 locale；回退到父会话持久化的
+    # locale（同 backend/workers/agent_worker.py 的兜底方式），没有 conversation_id
+    # 或没查到时 AgentSpec/TaskSpec 自身会再兜底到部署默认语言。
+    nested_language = None
+    if conversation_id:
+        conv = Conversation.get_by_id(conversation_id)
+        if conv:
+            # Deferred import: same circular-import concern documented in
+            # backend/services/conversation/__init__.py's _section_labels().
+            from backend.services.chat.language import resolve_default_language
+
+            nested_language = resolve_default_language((conv.get("metadata") or {}).get("locale"))
+
+    agent_specs: List[AgentSpec] = AgentSpec.list_from_agent_record(
+        synthetic_agent_record, language=nested_language
+    )
+    task_specs: List[TaskSpec] = TaskSpec.list_from_agent_record(
+        synthetic_agent_record, language=nested_language
+    )
     if not agent_specs or not task_specs:
         raise RuntimeError(
             f"crew-tool {metadata.name} preset is missing agents/tasks definition"

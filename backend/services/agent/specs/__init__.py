@@ -70,6 +70,38 @@ def _normalize_tool_names(raw_tools: Any) -> List[str]:
     return names
 
 
+def _resolve_localized_text(value: Any, language: Optional[str]) -> str:
+    """解析 preset YAML 里的 role/goal/backstory/description/expected_output 字段。
+
+    向后兼容两种写法：
+    - 纯字符串：一直按原样使用，与 language 无关（老 preset、简单场景不必迁移）。
+    - ``{"English": "...", "Chinese": "...", "Japanese": "..."}`` 字典：按解析出的会话
+      语言选取对应文案。这类字段（尤其是 role/goal/backstory）会整段拼进 LLM 的
+      system prompt，即使任务描述里显式声明了 default_language，大段固定语言的
+      persona 文本仍会把模型的输出语言带偏——所以需要跟 SECTION_LABELS
+      （backend/services/conversation/__init__.py）一样按语言选择，而不是任由
+      单一语言的大段文本主导整个 prompt。
+
+    Fallback chain when the dict doesn't have an exact `language` key:
+    deployment default (DEFAULT_RESPONSE_LANGUAGE) -> "English" -> first
+    value in the dict (so a preset that only ships one translation still
+    works instead of raising).
+    """
+    if isinstance(value, dict):
+        if language and language in value:
+            return str(value[language] or "").strip()
+        # Deferred import: same circular-import concern documented in
+        # backend/services/conversation/__init__.py's _section_labels().
+        from backend.services.chat.language import DEFAULT_RESPONSE_LANGUAGE
+
+        if DEFAULT_RESPONSE_LANGUAGE in value:
+            return str(value[DEFAULT_RESPONSE_LANGUAGE] or "").strip()
+        if "English" in value:
+            return str(value["English"] or "").strip()
+        return str(next(iter(value.values()), "") or "").strip()
+    return str(value or "").strip()
+
+
 @dataclass
 class AgentSpec:
     """CrewAI Agent 的最小配置表示。"""
@@ -86,14 +118,22 @@ class AgentSpec:
     preferred_tool_names: List[str] = field(default_factory=list)
 
     @classmethod
-    def from_agent_record(cls, agent_record: Dict[str, Any]) -> "AgentSpec":
+    def from_agent_record(cls, agent_record: Dict[str, Any], *, language: Optional[str] = None) -> "AgentSpec":
         """向后兼容：返回单 Agent 配置。"""
-        specs = cls.list_from_agent_record(agent_record)
+        specs = cls.list_from_agent_record(agent_record, language=language)
         return specs[0]
 
     @classmethod
-    def list_from_agent_record(cls, agent_record: Dict[str, Any]) -> List["AgentSpec"]:
-        """支持多 Agent 配置：优先读取 config.agents(list)，回退到 config.agent(dict)。"""
+    def list_from_agent_record(
+        cls, agent_record: Dict[str, Any], *, language: Optional[str] = None
+    ) -> List["AgentSpec"]:
+        """支持多 Agent 配置：优先读取 config.agents(list)，回退到 config.agent(dict)。
+
+        ``language`` 用于解析 role/goal/backstory 里按语言分文案的 preset
+        （见 ``_resolve_localized_text``）；纯字符串写法的 preset 不受影响。
+        未传时按 ``_resolve_localized_text`` 自身的兜底链（部署默认语言 ->
+        English -> 字典里第一个值）解析。
+        """
         config = dict(agent_record.get("config") or {})
         record_name = str(agent_record.get("name") or "Agent").strip() or "Agent"
         record_description = str(agent_record.get("description") or "").strip()
@@ -125,17 +165,17 @@ class AgentSpec:
                 suffix += 1
             used_names.add(unique_name)
 
-            role = str(
-                agent_cfg.get("role")
+            role = (
+                _resolve_localized_text(agent_cfg.get("role"), language)
                 or (record_name if idx == 0 else unique_name)
             ).strip() or unique_name
-            goal = str(
-                agent_cfg.get("goal")
+            goal = (
+                _resolve_localized_text(agent_cfg.get("goal"), language)
                 or record_description
                 or f"Use the available tools to complete the assigned {record_type} task."
             ).strip()
-            backstory = str(
-                agent_cfg.get("backstory")
+            backstory = (
+                _resolve_localized_text(agent_cfg.get("backstory"), language)
                 or record_description
                 or (
                     f"You are {role}, a reliable agent specialized in {record_type} tasks. "
@@ -188,7 +228,15 @@ class TaskSpec:
     agent_name: Optional[str] = None
 
     @classmethod
-    def list_from_agent_record(cls, agent_record: Dict[str, Any]) -> List["TaskSpec"]:
+    def list_from_agent_record(
+        cls, agent_record: Dict[str, Any], *, language: Optional[str] = None
+    ) -> List["TaskSpec"]:
+        """``language`` resolves per-language ``description``/``expected_output``
+        dicts the same way AgentSpec resolves role/goal/backstory - see
+        ``_resolve_localized_text``. Resolved text may still contain
+        ``{message}``/``{default_language}``/etc. placeholders; those are
+        filled in later by the caller's own templating, unaffected by this.
+        """
         config = dict(agent_record.get("config") or {})
         raw_tasks = config.get("tasks")
         if isinstance(raw_tasks, list) and raw_tasks:
@@ -197,12 +245,12 @@ class TaskSpec:
                 if not isinstance(item, dict):
                     continue
                 task_id = str(item.get("id") or f"task_{idx}").strip() or f"task_{idx}"
-                description = str(
-                    item.get("description")
+                description = (
+                    _resolve_localized_text(item.get("description"), language)
                     or "Complete the user's request using the available context and tools. Input: {message}"
                 ).strip()
-                expected_output = str(
-                    item.get("expected_output")
+                expected_output = (
+                    _resolve_localized_text(item.get("expected_output"), language)
                     or "A complete, accurate, and concise result in markdown format."
                 ).strip()
                 context = [str(v).strip() for v in (item.get("context") or []) if str(v).strip()]

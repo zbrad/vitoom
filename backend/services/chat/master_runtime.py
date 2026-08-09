@@ -148,10 +148,19 @@ class MasterAgentRuntime:
         #   的 {message} 占位符，LLM 每轮都能看到 user/assistant 交替；
         # - context.original_user_message 保留纯本轮输入，供 ToolSelection
         #   打分，避免历史噪音干扰工具相关性。
+        # 会话默认回复语言：优先取本次 WS 连接/建会话时捕获的浏览器 locale
+        # （见 backend/websocket/chat_routes.py、backend/api/chat/routes.py），
+        # 没有信号时兜底英文。显式语言请求由 prompt 里的策略文本自行处理。
+        # 解析一次，同时喂给 build_prompt_with_history（结构化 section label
+        # 语言）和 command_context（LLM 的语言指令），避免拼出一个 label 语言
+        # 和指令语言不一致、互相打架的 prompt。
+        default_language = resolve_default_language((runtime.metadata or {}).get("locale"))
+
         try:
             prompt_with_history = build_prompt_with_history(
                 conversation_id=runtime.session_id,
                 new_message=user_text,
+                language=default_language,
             )
         except Exception as exc:
             logger.warning(
@@ -164,12 +173,7 @@ class MasterAgentRuntime:
         command_context = build_conditional_context(prompt_with_history)
         command_context["original_user_message"] = user_text
         command_context["turn_id"] = turn.turn_id
-        # 会话默认回复语言：优先取本次 WS 连接/建会话时捕获的浏览器 locale
-        # （见 backend/websocket/chat_routes.py、backend/api/chat/routes.py），
-        # 没有信号时兜底英文。显式语言请求由 prompt 里的策略文本自行处理。
-        command_context["default_language"] = resolve_default_language(
-            (runtime.metadata or {}).get("locale")
-        )
+        command_context["default_language"] = default_language
 
         command = AgentCommand(
             user_id=runtime.user_id,
@@ -671,8 +675,13 @@ def _run_crew_blocking(
         ToolUsageStartedEvent,
     )
 
-    agent_specs: List[AgentSpec] = AgentSpec.list_from_agent_record(agent_record)
-    task_specs: List[TaskSpec] = TaskSpec.list_from_agent_record(agent_record)
+    # 复用同一个已解析出的会话语言，让 role/goal/backstory/description 等
+    # preset 文案（若按语言拆分，见 AgentSpec/_resolve_localized_text）和
+    # task 描述里的 {default_language} 指令用同一种语言 - 否则不同 preset
+    # 字段各说各话，互相打架，见本轮定位到的 preset-master-agent.yaml 问题。
+    command_language = command.context.get("default_language") if isinstance(command.context, dict) else None
+    agent_specs: List[AgentSpec] = AgentSpec.list_from_agent_record(agent_record, language=command_language)
+    task_specs: List[TaskSpec] = TaskSpec.list_from_agent_record(agent_record, language=command_language)
 
     unique_tool_names: List[str] = []
     seen_tool_names: set = set()

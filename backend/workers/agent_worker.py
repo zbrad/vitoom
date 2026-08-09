@@ -211,8 +211,12 @@ class AgentWorker(TaskWorker):
             )
             await self.update_progress(task_id, 10, "Initializing agent runtime")
 
-            agent_specs = AgentSpec.list_from_agent_record(agent_record)
-            task_specs = TaskSpec.list_from_agent_record(agent_record)
+            agent_specs = AgentSpec.list_from_agent_record(
+                agent_record, language=command.context.get("default_language")
+            )
+            task_specs = TaskSpec.list_from_agent_record(
+                agent_record, language=command.context.get("default_language")
+            )
             await self.update_progress(task_id, 30, "Building agent crew")
 
             unique_tool_names: list = []

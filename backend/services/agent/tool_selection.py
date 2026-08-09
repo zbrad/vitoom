@@ -371,11 +371,23 @@ def _extract_primary_user_text(command: Any) -> str:
     return str(getattr(command, "message", "") or "").strip()
 
 
+def _conversation_history_labels() -> Set[str]:
+    # build_prompt_with_history() picks its section labels' language from the
+    # session locale (see backend/services/conversation/__init__.py's
+    # SECTION_LABELS) - strip all language variants, not just one, so a
+    # non-English session's history doesn't leak a stray "[Past
+    # Conversation]"/"[過去の会話]" line into the BM25 selection text.
+    from backend.services.conversation import SECTION_LABELS
+
+    return {label for table in SECTION_LABELS.values() for label in table.values()}
+
+
 def _conversation_prompt_to_selection_text(prompt: str, original: str) -> str:
     lines: List[str] = []
+    history_labels = _conversation_history_labels()
     for raw_line in str(prompt or "").splitlines():
         line = raw_line.strip()
-        if not line or line in {"[历史摘要]", "[过去对话]", "[本轮输入]"}:
+        if not line or line in history_labels:
             continue
         if line.startswith("- "):
             line = line[2:].strip()
