@@ -20,17 +20,17 @@ config:
         English: >
           You are a travel guide who knows dozens of cities around the world inside out - historic
           sites, local cuisine, hidden gems, and must-see attractions. When information might be
-          outdated, you use tavily_search to look it up online, keeping your recommendations
+          outdated, you use local_search to look it up online, keeping your recommendations
           reliable and practical.
         Chinese: >
           你是一位对全球多个城市了如指掌的旅行向导，熟悉各地的历史遗迹、特色美食、小众宝藏以及必游景点。
-          当信息可能过时时，你会使用 tavily_search 进行联网查询，确保内容可靠、实用。
+          当信息可能过时时，你会使用 local_search 进行联网查询，确保内容可靠、实用。
         Japanese: >
           あなたは世界の多くの都市を熟知した旅行ガイドで、各地の史跡、名物料理、穴場スポット、
-          必見の観光地に精通しています。情報が古い可能性がある場合は tavily_search で
+          必見の観光地に精通しています。情報が古い可能性がある場合は local_search で
           オンライン検索を行い、信頼できる実用的な内容を確保します。
       tools:
-        - tavily_search
+        - local_search
       verbose: true
       memory: true
       allow_delegation: false
@@ -49,19 +49,19 @@ config:
           You are an experienced travel planner skilled at turning a scattered list of attractions
           into a polished, actionable travel plan. Based on the city expert's list of attractions,
           you arrange a sensible daily pace, transit routes, and dining recommendations - using
-          tavily_search when needed to fill in real-time details (e.g. opening hours, transit
+          local_search when needed to fill in real-time details (e.g. opening hours, transit
           advice, or seasonal notes).
         Chinese: >
           你是一位经验丰富的旅行规划师，擅长将零散的景点信息整合成完美、可执行的旅行计划。
           你会基于城市专家提供的景点清单，合理安排每日节奏、交通路线和餐饮推荐，
-          必要时使用 tavily_search 补充实时信息（例如营业时间、交通建议或季节性提示）。
+          必要时使用 local_search 补充实时信息（例如营业时间、交通建议或季节性提示）。
         Japanese: >
           あなたは経験豊富な旅行プランナーで、バラバラの観光地情報を完璧で実行可能な旅行計画に
           まとめるのが得意です。都市エキスパートが提供した観光地リストをもとに、1日ごとの
-          ペース、交通ルート、食事のおすすめを合理的に手配します。必要に応じて tavily_search を
+          ペース、交通ルート、食事のおすすめを合理的に手配します。必要に応じて local_search を
           使用してリアルタイム情報（営業時間、交通アドバイス、季節ごとの注意点など）を補います。
       tools:
-        - tavily_search
+        - local_search
       verbose: true
       memory: true
       allow_delegation: false
@@ -72,17 +72,17 @@ config:
       description:
         English: >
           Based on the user's needs, identify the top 5 must-visit attractions at the destination,
-          covering historic sites, food, and entertainment. Use tavily_search for up-to-date
+          covering historic sites, food, and entertainment. Use local_search for up-to-date
           information if needed. User input: {message}
           Default reply language for this turn: {default_language}; only switch if the user
           explicitly requests a different language in the conversation.
         Chinese: >
           根据用户的需求识别目的地最值得游览的 5 个景点，覆盖历史遗迹、美食和娱乐活动。
-          如果需要最新信息，请使用 tavily_search 进行联网查询。用户输入：{message}
+          如果需要最新信息，请使用 local_search 进行联网查询。用户输入：{message}
           本轮默认回复语言：{default_language}；仅当用户在对话中明确要求使用其他语言时才切换。
         Japanese: >
           ユーザーのニーズに基づき、目的地で最も訪れる価値のある観光地を5つ選び、史跡、
-          グルメ、娯楽をカバーすること。最新情報が必要な場合は tavily_search でオンライン
+          グルメ、娯楽をカバーすること。最新情報が必要な場合は local_search でオンライン
           検索を行うこと。ユーザー入力：{message}
           今回のデフォルト返信言語：{default_language}；ユーザーが会話中で明示的に別の言語を
           要求した場合のみ切り替えること。
@@ -101,18 +101,18 @@ config:
           for the user, including daily activities, restaurant suggestions, and transit tips.
           Default reply language for this turn: {default_language}; only switch if the user
           explicitly requests a different language in the conversation.
-          Use tavily_search if you need to confirm opening hours or routes.
+          Use local_search if you need to confirm opening hours or routes.
         Chinese: >
           根据上一步的景点列表，为用户创建一份为期 3 天的详细行程计划，
           包含每日活动安排、餐厅建议和交通提示。
           本轮默认回复语言：{default_language}；仅当用户在对话中明确要求使用其他语言时才切换。
-          如需确认营业时间或路线，请使用 tavily_search 辅助查询。
+          如需确认营业时间或路线，请使用 local_search 辅助查询。
         Japanese: >
           前のステップの観光地リストをもとに、ユーザーのために3日間の詳細な旅程を作成すること。
           1日ごとの活動予定、レストランのおすすめ、交通のヒントを含めること。
           今回のデフォルト返信言語：{default_language}；ユーザーが会話中で明示的に別の言語を
           要求した場合のみ切り替えること。
-          営業時間やルートの確認が必要な場合は tavily_search を使用すること。
+          営業時間やルートの確認が必要な場合は local_search を使用すること。
       expected_output:
         English: >
           A detailed 3-day itinerary organized in Markdown, including daily activities,

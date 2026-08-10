@@ -73,10 +73,6 @@ def get_openclaw_token() -> str:
     return str(_get_openclaw_config("token", "openclaw_token", "") or "").strip()
 
 
-def get_tavily_api_key() -> str:
-    return get_agent_secret("TAVILY_API_KEY", "")
-
-
 def get_local_search_base_url() -> str:
     """Base URL for the self-hosted SearXNG instance (see docker-compose.yml's
     ``searxng`` service). No API key required - it's an internal-only
