@@ -77,6 +77,17 @@ def get_tavily_api_key() -> str:
     return get_agent_secret("TAVILY_API_KEY", "")
 
 
+def get_local_search_base_url() -> str:
+    """Base URL for the self-hosted SearXNG instance (see docker-compose.yml's
+    ``searxng`` service). No API key required - it's an internal-only
+    container reachable over the vitoom-net docker network."""
+
+    env_value = str(os.getenv("LOCAL_SEARCH_BASE_URL") or "").strip()
+    if env_value:
+        return env_value.rstrip("/")
+    return str(get_config("agents.local_search.base_url", "http://searxng:8080") or "").strip().rstrip("/")
+
+
 def get_openclaw_timeout_seconds() -> float:
     raw_value = _get_openclaw_config("timeout_seconds", "openclaw_timeout_seconds", 30)
     try:
