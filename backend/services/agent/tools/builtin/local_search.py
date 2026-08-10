@@ -1,9 +1,9 @@
 """local_search 工具：调用自托管 SearXNG 做联网搜索，无需第三方付费 API Key。
 
-背景见 https://github.com/tonera/vitoom/issues/3 —— tavily_search 依赖付费的
-Tavily Key，未配置时整条联网核实事实的链路会失效。本工具指向
-docker-compose.yml 中的 searxng 服务（同一 vitoom-net 网络内，无需 Key），
-作为 tavily_search 的本地/免费替代或补充。
+背景见 https://github.com/tonera/vitoom/issues/3 —— 此前唯一的联网搜索工具
+tavily_search 依赖付费的 Tavily Key，未配置时整条联网核实事实的链路会失效。
+本工具指向 docker-compose.yml 中的 searxng 服务（同一 vitoom-net 网络内，
+无需 Key），是当前唯一内置的联网搜索工具，取代了原先的 tavily_search。
 """
 
 from __future__ import annotations
