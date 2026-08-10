@@ -79,7 +79,8 @@ services:
         sed "s/__SEARXNG_SECRET_KEY__/$$SEARXNG_SECRET_KEY/" /etc/searxng/settings.template.yml > /etc/searxng/settings.yml
         exec /usr/local/searxng/entrypoint.sh
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/healthz || exit 1"]
+      # searxng/searxng's image has no curl; wget (busybox) is available.
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/healthz || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
