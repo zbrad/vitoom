@@ -62,7 +62,7 @@ sentencepiece
 socksio
 markitdown[pdf,docx,xlsx,xls,pptx,outlook]
 # Keep compatible with crewai==1.9.3, which pins tokenizers~=0.20.3.
-transformers==4.46.3
+transformers==5.10.1
 onnxruntime
 pymupdf==1.26.7
 
