@@ -3,7 +3,7 @@
 
 pydantic>=2.5.0
 pydantic-settings>=2.1.0
-torch==2.11.0
+torch==2.13.0
 torchvision==0.26.0 
 torchaudio==2.11.0
 
@@ -48,7 +48,7 @@ nvidia-ml-py>=13.0.0
 
 # AI推理依赖
 diffusers>=0.38.0
-transformers>=4.57,<5
+transformers>=5.10.1,<6
 accelerate>=1.9
 pillow>=10.0.0
 safetensors>=0.4.0  # 用于模型权重文件读取

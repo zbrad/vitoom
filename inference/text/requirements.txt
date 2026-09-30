@@ -38,7 +38,7 @@ nvidia-ml-py>=13.0.0
 #     --extra-index-url https://download.pytorch.org/whl/cu129 \
 #     --index-strategy unsafe-best-match
 # 然后再安装本文件其余依赖。
-transformers==5.8.0
+transformers==5.10.1
 accelerate>=0.24.0
 safetensors>=0.4.0
 sentencepiece

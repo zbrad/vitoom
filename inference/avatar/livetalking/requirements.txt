@@ -26,7 +26,7 @@ configargparse
 lpips==0.1.3
 imageio-ffmpeg
 
-transformers==4.46.2
+transformers==5.10.1
 edge_tts
 flask
 flask_sockets
